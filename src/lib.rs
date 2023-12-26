@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 
-pub struct ChannelPool<Manager: RBPoolManager> {
+pub struct FastPool<Manager: FastPoolManager> {
     manager: Manager,
     sender: Sender<Manager::Connection>,
     receiver: Receiver<Manager::Connection>,
@@ -14,7 +14,7 @@ pub struct ChannelPool<Manager: RBPoolManager> {
 }
 
 #[async_trait]
-pub trait RBPoolManager {
+pub trait FastPoolManager {
     type Connection: Send + 'static;
 
     type Error: for<'a> From<&'a str> + ToString + Send + Sync + 'static;
@@ -23,7 +23,7 @@ pub trait RBPoolManager {
     async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error>;
 }
 
-impl<M: RBPoolManager> ChannelPool<M> {
+impl<M: FastPoolManager> FastPool<M> {
     pub fn new(m: M) -> Self {
         let (s, r) = flume::unbounded();
         Self {
@@ -92,13 +92,13 @@ impl<M: RBPoolManager> ChannelPool<M> {
     }
 }
 
-pub struct ConnectionBox<M: RBPoolManager> {
+pub struct ConnectionBox<M: FastPoolManager> {
     inner: Option<M::Connection>,
     sender: Sender<M::Connection>,
     in_use: Arc<AtomicU64>,
 }
 
-impl<M: RBPoolManager> Deref for ConnectionBox<M> {
+impl<M: FastPoolManager> Deref for ConnectionBox<M> {
     type Target = M::Connection;
 
     fn deref(&self) -> &Self::Target {
@@ -106,13 +106,13 @@ impl<M: RBPoolManager> Deref for ConnectionBox<M> {
     }
 }
 
-impl<M: RBPoolManager> DerefMut for ConnectionBox<M> {
+impl<M: FastPoolManager> DerefMut for ConnectionBox<M> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner.as_mut().unwrap()
     }
 }
 
-impl<M: RBPoolManager> Drop for ConnectionBox<M> {
+impl<M: FastPoolManager> Drop for ConnectionBox<M> {
     fn drop(&mut self) {
         if let Some(v) = self.inner.take() {
             _ = self.sender.send(v);
@@ -132,12 +132,12 @@ mod test {
     use std::ops::Deref;
     use std::time::Duration;
     use async_trait::async_trait;
-    use crate::{ChannelPool, RBPoolManager};
+    use crate::{FastPool, FastPoolManager};
 
     pub struct TestManager {}
 
     #[async_trait]
-    impl RBPoolManager for TestManager {
+    impl FastPoolManager for TestManager {
         type Connection = i32;
         type Error = String;
 
@@ -153,7 +153,7 @@ mod test {
     // --nocapture
     #[tokio::test]
     async fn test_pool_get() {
-        let p = ChannelPool::new(TestManager {});
+        let p = FastPool::new(TestManager {});
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
@@ -164,7 +164,7 @@ mod test {
 
     #[tokio::test]
     async fn test_pool_get_timeout() {
-        let p = ChannelPool::new(TestManager {});
+        let p = FastPool::new(TestManager {});
         p.set_max_open(10);
         let mut arr = vec![];
         for i in 0..10 {

@@ -29,14 +29,14 @@ async-trait = "0.1"
 ```rust
     use std::time::Duration;
     use async_trait::async_trait;
-    use crate::{ChannelPool, RBPoolManager};
+    use crate::{FastPool, FastPoolManager};
 
     pub struct TestManager {}
 
     pub struct MyConnection {}
 
     #[async_trait]
-    impl RBPoolManager for TestManager {
+    impl FastPoolManager for TestManager {
         type Connection = MyConnection;
         type Error = String;
 
@@ -53,7 +53,7 @@ async-trait = "0.1"
 
     #[tokio::main]
     async fn main() {
-        let pool = ChannelPool::new(TestManager {});
+        let pool = FastPool::new(TestManager {});
         pool.set_max_open(10);
         for i in 0..10 {
             let v = pool.get().await.unwrap();
