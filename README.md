@@ -29,38 +29,42 @@ tokio = {version = "1",features = ["time","rt-multi-thread","macros"]}
 ```
 * impl trait
 ```rust
-    use std::time::Duration;
-    use async_trait::async_trait;
-    use crate::{Pool, Manager};
+use std::ops::{DerefMut};
+use std::time::Duration;
+use async_trait::async_trait;
+use fast_pool::{Manager, Pool};
 
-    pub struct TestManager {}
+#[derive(Debug)]
+pub struct TestManager {}
 
-    pub struct MyConnection {}
+#[async_trait]
+impl Manager for TestManager {
+    type Connection = String;
+    type Error = String;
 
-    #[async_trait]
-    impl Manager for TestManager {
-        type Connection = MyConnection;
-        type Error = String;
-
-        async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-            //connect get an MyConnection
-            Ok(MyConnection{})
-        }
-
-        async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
-            //use conn.ping() check connection
-            Ok(conn)
-        }
+    async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        Ok("conn".to_string())
     }
 
-    #[tokio::main]
-    async fn main() {
-        let pool = Pool::new(TestManager {});
-        pool.set_max_open(10);
-        for i in 0..10 {
-            let v = pool.get().await.unwrap();
-            println!("{},{}", i, v.deref());
+    async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
+        //check should use conn.ping()
+        if conn == "error" {
+            return Err(Self::Error::from(&conn));
         }
+        Ok(conn)
     }
+}
 
+#[tokio::main]
+async fn main() {
+    let p = Pool::new(TestManager {});
+    println!("status = {:?}",p.state());
+    p.set_max_open(10);
+    println!("status = {:?}",p.state());
+
+    let mut conn = p.get().await.unwrap();
+    println!("conn = {}",conn.deref_mut());
+    let mut conn = p.get_timeout(Some(Duration::from_secs(1))).await.unwrap();
+    println!("conn = {}",conn.deref_mut());
+}
 ```
