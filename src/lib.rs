@@ -142,14 +142,17 @@ mod test {
 
     #[async_trait]
     impl Manager for TestManager {
-        type Connection = i32;
+        type Connection = String;
         type Error = String;
 
         async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-            Ok(0)
+            Ok(String::new())
         }
 
         async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
+            if conn=="error"{
+                return Err(Self::Error::from(&conn));
+            }
             Ok(conn)
         }
     }
@@ -162,7 +165,7 @@ mod test {
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
-            println!("{},{}", i, v.inner.unwrap());
+            println!("{},{}", i, v.deref());
             arr.push(v);
         }
     }
@@ -178,5 +181,16 @@ mod test {
             arr.push(v);
         }
         assert_eq!(p.get_timeout(Some(Duration::from_secs(0))).await.is_err(), true);
+    }
+
+    #[tokio::test]
+    async fn test_pool_check() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(10).await;
+        let mut v = p.get().await.unwrap();
+        *v.inner.as_mut().unwrap() = "error".to_string();
+        for _i in 0..10 {
+            let _v = p.get().await.unwrap();
+        }
     }
 }
