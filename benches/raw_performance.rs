@@ -82,12 +82,12 @@ pub fn block_on<T,R>(task: T)-> R
 #[test]
 fn bench_pool() {
     use async_trait::async_trait;
-    use fast_pool::{FastPool, FastPoolManager};
+    use fast_pool::{Pool, Manager};
 
     pub struct TestManager {}
 
     #[async_trait]
-    impl FastPoolManager for TestManager {
+    impl Manager for TestManager {
         type Connection = i32;
         type Error = String;
 
@@ -100,7 +100,7 @@ fn bench_pool() {
         }
     }
     let f = async {
-        let p = FastPool::new(TestManager {});
+        let p = Pool::new(TestManager {});
         rbench!(100000, {
               let v = p.get().await.unwrap();
         });
