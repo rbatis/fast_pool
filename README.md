@@ -2,7 +2,6 @@
 a fast async pool based on channel
 * support `get()`,`get_timeout()`,`state()` methods
 * support atomic max_open(Resize freely)
-* support atomic in_use(Resize freely)
 
 ### way fast_pool?
 
@@ -50,9 +49,10 @@ async-trait = "0.1"
 
     #[tokio::main]
     async fn main() {
-        let p = ChannelPool::new(TestManager {});
+        let pool = ChannelPool::new(TestManager {});
+        pool.set_max_open(10);
         for i in 0..10 {
-            let v = p.get().await.unwrap();
+            let v = pool.get().await.unwrap();
             println!("{},{}", i, v.inner.unwrap());
         }
     }
