@@ -4,6 +4,21 @@ a fast async pool based on channel
 * support atomic max_open(Resize freely)
 * support atomic in_use(Resize freely)
 
+### way fast_pool?
+
+* fast performance
+```log
+//windows:
+//---- bench_pool stdout ----
+//use Time: 4.0313ms ,each:40 ns/op
+//use QPS: 24749412 QPS/s
+//macos:
+//---- bench_pool stdout ----
+// use Time: 6.373708ms ,each:63 ns/op
+// use QPS: 15683710 QPS/s
+```
+
+
 ### how to use this?
 
 * add toml
