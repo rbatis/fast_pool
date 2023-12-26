@@ -42,7 +42,8 @@ impl<M: Manager> Pool<M> {
     pub async fn get_timeout(&self, d: Option<Duration>) -> Result<ConnectionBox<M>, M::Error> {
         //pop connection from channel
         let f = async {
-            if self.in_use.load(Ordering::SeqCst) <= self.max_open.load(Ordering::SeqCst) {
+            let connections = self.in_use.load(Ordering::SeqCst) + self.sender.len() as u64;
+            if connections < self.max_open.load(Ordering::SeqCst) {
                 let conn = self.manager.connect().await?;
                 self.sender.send(conn).map_err(|e| M::Error::from(&e.to_string()))?;
             }
