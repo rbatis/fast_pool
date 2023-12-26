@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
+#[derive(Debug)]
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
     sender: Sender<M::Connection>,
@@ -117,6 +118,7 @@ impl<M: Manager> Pool<M> {
     }
 }
 
+#[derive(Debug)]
 pub struct ConnectionBox<M: Manager> {
     pub inner: Option<M::Connection>,
     sender: Sender<M::Connection>,
@@ -167,6 +169,7 @@ mod test {
     use std::ops::Deref;
     use std::time::Duration;
 
+    #[derive(Debug)]
     pub struct TestManager {}
 
     #[async_trait]
@@ -184,6 +187,12 @@ mod test {
             }
             Ok(conn)
         }
+    }
+
+    #[tokio::test]
+    async fn test_debug() {
+        let p = Pool::new(TestManager {});
+        println!("{:?}",p);
     }
 
     // --nocapture
