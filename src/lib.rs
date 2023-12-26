@@ -5,6 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 
+/// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
     manager: M,
     sender: Sender<M::Connection>,
@@ -13,6 +14,7 @@ pub struct Pool<M: Manager> {
     in_use: Arc<AtomicU64>,
 }
 
+/// Manager create Connection and check Connection
 #[async_trait]
 pub trait Manager {
     type Connection: Send + 'static;
