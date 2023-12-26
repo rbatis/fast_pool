@@ -253,5 +253,9 @@ mod test {
         p.set_max_open(1);
         drop(arr);
         println!("{:?}", p.state());
+        assert_eq!(
+            p.get_timeout(Some(Duration::from_secs(0))).await.is_err(),
+            false
+        );
     }
 }
