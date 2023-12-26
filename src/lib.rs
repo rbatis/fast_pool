@@ -19,7 +19,7 @@ pub struct Pool<M: Manager> {
 pub trait Manager {
     type Connection: Send + 'static;
 
-    type Error: for<'a> From<&'a str> + ToString + Send + Sync + 'static;
+    type Error: for<'a> From<&'a str> + Send + Sync + 'static;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error>;
     async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error>;
