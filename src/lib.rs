@@ -7,11 +7,23 @@ use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
-    manager: M,
+    manager: Arc<M>,
     sender: Sender<M::Connection>,
     receiver: Receiver<M::Connection>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
+}
+
+impl<M: Manager> Clone for Pool<M> {
+    fn clone(&self) -> Self {
+        Self {
+            manager: self.manager.clone(),
+            sender: self.sender.clone(),
+            receiver: self.receiver.clone(),
+            max_open: self.max_open.clone(),
+            in_use: self.in_use.clone(),
+        }
+    }
 }
 
 /// Manager create Connection and check Connection
@@ -31,7 +43,7 @@ impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self {
         let (s, r) = flume::unbounded();
         Self {
-            manager: m,
+            manager: Arc::new(m),
             sender: s,
             receiver: r,
             max_open: Arc::new(AtomicU64::new(10)),
@@ -257,5 +269,83 @@ mod test {
             p.get_timeout(Some(Duration::from_secs(0))).await.is_err(),
             false
         );
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_access() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(10);
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let pool = p.clone();
+            let handle = tokio::spawn(async move {
+                let _ = pool.get().await.unwrap();
+            });
+            handles.push(handle);
+        }
+        for handle in handles {
+            handle.await.unwrap();
+        }
+        assert_eq!(p.state().connections, 10);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_connection() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(10);
+
+        let mut conn = p.get().await.unwrap();
+        *conn.inner.as_mut().unwrap() = "error".to_string();
+
+        // Attempt to get a new connection, should not be the invalid one
+        let new_conn = p.get().await.unwrap();
+        assert_ne!(new_conn.deref(), &"error".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_connection_lifetime() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(10);
+
+        let conn = p.get().await.unwrap();
+        // Perform operations using the connection
+        // ...
+
+        drop(conn); // Drop the connection
+
+        // Ensure dropped connection is not in use
+        assert_eq!(p.state().in_use, 0);
+
+        // Acquire a new connection
+        let new_conn = p.get().await.unwrap();
+        assert_ne!(new_conn.deref(), &"error".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_boundary_conditions() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(2);
+
+        // Acquire connections until pool is full
+        let conn_1 = p.get().await.unwrap();
+        let _conn_2 = p.get().await.unwrap();
+        assert_eq!(p.state().in_use, 2);
+
+        // Attempt to acquire another connection (pool is full)
+        assert!(p.get_timeout(Some(Duration::from_secs(0))).await.is_err());
+
+        // Release one connection, pool is no longer full
+        drop(conn_1);
+        assert_eq!(p.state().in_use, 1);
+
+        // Acquire another connection (pool has space)
+        let _conn_3 = p.get().await.unwrap();
+        assert_eq!(p.state().in_use, 2);
+
+        // Increase pool size
+        p.set_max_open(3);
+        // Acquire another connection after increasing pool size
+        let _conn_4 = p.get().await.unwrap();
+        assert_eq!(p.state().in_use, 3);
     }
 }
