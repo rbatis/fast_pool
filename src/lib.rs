@@ -76,7 +76,7 @@ impl<M: Manager> Pool<M> {
     pub async fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
-            connections: self.sender.len() as u64,
+            connections: self.in_use.load(Ordering::Relaxed)+self.sender.len() as u64,
             in_use: self.in_use.load(Ordering::Relaxed),
         }
     }
@@ -123,8 +123,11 @@ impl<M: Manager> Drop for ConnectionBox<M> {
 }
 
 pub struct State {
+    /// max open limit
     pub max_open: u64,
+    ///connections = in_use number + in_pool number
     pub connections: u64,
+    /// user use connection number
     pub in_use: u64,
 }
 
