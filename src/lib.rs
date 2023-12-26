@@ -81,6 +81,7 @@ impl<M: Manager> Pool<M> {
             inner: Some(conn),
             sender: self.sender.clone(),
             in_use: self.in_use.clone(),
+            max_open: self.max_open.clone(),
         })
     }
 
@@ -108,6 +109,7 @@ pub struct ConnectionBox<M: Manager> {
     pub inner: Option<M::Connection>,
     sender: Sender<M::Connection>,
     in_use: Arc<AtomicU64>,
+    max_open: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Deref for ConnectionBox<M> {
@@ -127,12 +129,16 @@ impl<M: Manager> DerefMut for ConnectionBox<M> {
 impl<M: Manager> Drop for ConnectionBox<M> {
     fn drop(&mut self) {
         if let Some(v) = self.inner.take() {
-            _ = self.sender.send(v);
+            let max_open = self.max_open.load(Ordering::SeqCst);
+            if self.sender.len() < max_open as usize {
+                _ = self.sender.send(v);
+            }
         }
         self.in_use.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
+#[derive(Debug)]
 pub struct State {
     /// max open limit
     pub max_open: u64,
@@ -233,5 +239,19 @@ mod test {
             p.get_timeout(Some(Duration::from_secs(0))).await.is_err(),
             true
         );
+    }
+
+    #[tokio::test]
+    async fn test_pool_resize2() {
+        let p = Pool::new(TestManager {});
+        p.set_max_open(2);
+        let mut arr = vec![];
+        for _i in 0..2 {
+            let v = p.get().await.unwrap();
+            arr.push(v);
+        }
+        p.set_max_open(1);
+        drop(arr);
+        println!("{:?}", p.state());
     }
 }
