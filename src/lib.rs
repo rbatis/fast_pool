@@ -9,8 +9,8 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
-    sender: Sender<M::Connection>,
-    receiver: Receiver<M::Connection>,
+    idle_send: Sender<M::Connection>,
+    idle_recv: Receiver<M::Connection>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
 }
@@ -19,8 +19,8 @@ impl<M: Manager> Clone for Pool<M> {
     fn clone(&self) -> Self {
         Self {
             manager: self.manager.clone(),
-            sender: self.sender.clone(),
-            receiver: self.receiver.clone(),
+            idle_send: self.idle_send.clone(),
+            idle_recv: self.idle_recv.clone(),
             max_open: self.max_open.clone(),
             in_use: self.in_use.clone(),
         }
@@ -46,8 +46,8 @@ impl<M: Manager> Pool<M> {
         let (s, r) = flume::unbounded();
         Self {
             manager: Arc::new(m),
-            sender: s,
-            receiver: r,
+            idle_send: s,
+            idle_recv: r,
             max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
         }
@@ -60,14 +60,14 @@ impl<M: Manager> Pool<M> {
     pub async fn get_timeout(&self, d: Option<Duration>) -> Result<ConnectionBox<M>, M::Error> {
         //pop connection from channel
         let f = async {
-            let connections = self.in_use.load(Ordering::SeqCst) + self.sender.len() as u64;
+            let connections = self.in_use.load(Ordering::SeqCst) + self.idle_send.len() as u64;
             if connections < self.max_open.load(Ordering::SeqCst) {
                 let conn = self.manager.connect().await?;
-                self.sender
+                self.idle_send
                     .send(conn)
                     .map_err(|e| M::Error::from(&e.to_string()))?;
             }
-            self.receiver
+            self.idle_recv
                 .recv_async()
                 .await
                 .map_err(|e| M::Error::from(&e.to_string()))
@@ -93,7 +93,7 @@ impl<M: Manager> Pool<M> {
         }
         Ok(ConnectionBox {
             inner: Some(conn),
-            sender: self.sender.clone(),
+            sender: self.idle_send.clone(),
             in_use: self.in_use.clone(),
             max_open: self.max_open.clone(),
         })
@@ -102,19 +102,19 @@ impl<M: Manager> Pool<M> {
     pub fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
-            connections: self.in_use.load(Ordering::Relaxed) + self.sender.len() as u64,
+            connections: self.in_use.load(Ordering::Relaxed) + self.idle_send.len() as u64,
             in_use: self.in_use.load(Ordering::Relaxed),
-            idle: self.sender.len() as u64,
+            idle: self.idle_send.len() as u64,
         }
     }
 
     pub fn set_max_open(&self, n: u64) {
         self.max_open.store(n, Ordering::SeqCst);
-        let open = self.sender.len() as u64;
+        let open = self.idle_send.len() as u64;
         if open > n {
             let del = open - n;
             for _ in 0..del {
-                _ = self.receiver.try_recv();
+                _ = self.idle_recv.try_recv();
             }
         }
     }
