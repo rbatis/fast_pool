@@ -25,6 +25,7 @@ a fast async pool based on channel
 ```toml
 fast_pool="0.1"
 async-trait = "0.1"
+tokio = {version = "1",features = ["time","rt-multi-thread","macros"]}
 ```
 * impl trait
 ```rust
