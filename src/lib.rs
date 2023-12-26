@@ -129,6 +129,7 @@ pub struct State {
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
     use std::time::Duration;
     use async_trait::async_trait;
     use crate::{ChannelPool, RBPoolManager};
@@ -164,10 +165,11 @@ mod test {
     #[tokio::test]
     async fn test_pool_get_timeout() {
         let p = ChannelPool::new(TestManager {});
+        p.set_max_open(10);
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
-            println!("{},{}", i, v.inner.unwrap());
+            println!("{},{}", i, v.deref());
             arr.push(v);
         }
         assert_eq!(p.get_timeout(Some(Duration::from_secs(0))).await.is_err(), true);

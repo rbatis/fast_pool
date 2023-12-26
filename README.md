@@ -33,16 +33,20 @@ async-trait = "0.1"
 
     pub struct TestManager {}
 
+    pub struct MyConnection {}
+
     #[async_trait]
     impl RBPoolManager for TestManager {
-        type Connection = i32;
+        type Connection = MyConnection;
         type Error = String;
 
         async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-            Ok(0)
+            //connect get an MyConnection
+            Ok(MyConnection{})
         }
 
         async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
+            //use conn.ping() check connection
             Ok(conn)
         }
     }
@@ -53,7 +57,7 @@ async-trait = "0.1"
         pool.set_max_open(10);
         for i in 0..10 {
             let v = pool.get().await.unwrap();
-            println!("{},{}", i, v.inner.unwrap());
+            println!("{},{}", i, v.deref());
         }
     }
 
