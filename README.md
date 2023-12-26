@@ -6,7 +6,7 @@ a fast async pool based on channel
 
 ### way fast_pool?
 
-* fast performance
+* fast get() method performance
 ```log
 //windows:
 //---- bench_pool stdout ----
