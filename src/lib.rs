@@ -53,7 +53,7 @@ impl<M: Manager> Pool<M> {
             if d.is_none() {
                 f.await?
             } else {
-                tokio::time::timeout(d.unwrap(), f).await.map_err(|_e| M::Error::from("get timeout"))??
+                tokio::time::timeout(d.unwrap(), f).await.map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
         //check connection
