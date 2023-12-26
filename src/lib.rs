@@ -42,12 +42,13 @@ pub trait Manager {
 
 impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self {
+        let default_max = num_cpus::get() as u64 * 4;
         let (s, r) = flume::unbounded();
         Self {
             manager: Arc::new(m),
             sender: s,
             receiver: r,
-            max_open: Arc::new(AtomicU64::new(10)),
+            max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -103,10 +104,12 @@ impl<M: Manager> Pool<M> {
             max_open: self.max_open.load(Ordering::Relaxed),
             connections: self.in_use.load(Ordering::Relaxed) + self.sender.len() as u64,
             in_use: self.in_use.load(Ordering::Relaxed),
+            idle: self.sender.len() as u64,
         }
     }
 
     pub fn set_max_open(&self, n: u64) {
+        self.max_open.store(n, Ordering::SeqCst);
         let open = self.sender.len() as u64;
         if open > n {
             let del = open - n;
@@ -114,7 +117,6 @@ impl<M: Manager> Pool<M> {
                 _ = self.receiver.try_recv();
             }
         }
-        self.max_open.store(n, Ordering::SeqCst);
     }
 }
 
@@ -142,13 +144,13 @@ impl<M: Manager> DerefMut for ConnectionBox<M> {
 
 impl<M: Manager> Drop for ConnectionBox<M> {
     fn drop(&mut self) {
+        self.in_use.fetch_sub(1, Ordering::SeqCst);
         if let Some(v) = self.inner.take() {
             let max_open = self.max_open.load(Ordering::SeqCst);
-            if self.sender.len() < max_open as usize {
+            if self.sender.len() as u64 + self.in_use.load(Ordering::SeqCst) < max_open {
                 _ = self.sender.send(v);
             }
         }
-        self.in_use.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -156,10 +158,12 @@ impl<M: Manager> Drop for ConnectionBox<M> {
 pub struct State {
     /// max open limit
     pub max_open: u64,
-    ///connections = in_use number + in_pool number
+    ///connections = in_use number + idle number
     pub connections: u64,
     /// user use connection number
     pub in_use: u64,
+    /// idle connection
+    pub idle: u64,
 }
 
 #[cfg(test)]
@@ -192,7 +196,7 @@ mod test {
     #[tokio::test]
     async fn test_debug() {
         let p = Pool::new(TestManager {});
-        println!("{:?}",p);
+        println!("{:?}", p);
     }
 
     // --nocapture
