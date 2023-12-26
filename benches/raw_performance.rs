@@ -55,10 +55,10 @@ macro_rules! rbench {
     }};
 }
 
-pub fn block_on<T,R>(task: T)-> R
-    where
-        T: Future<Output = R> + Send + 'static,
-        T::Output: Send + 'static,
+pub fn block_on<T, R>(task: T) -> R
+where
+    T: Future<Output = R> + Send + 'static,
+    T::Output: Send + 'static,
 {
     tokio::task::block_in_place(|| {
         tokio::runtime::Builder::new_multi_thread()
@@ -68,7 +68,6 @@ pub fn block_on<T,R>(task: T)-> R
             .block_on(task)
     })
 }
-
 
 //cargo test --release --package fast_pool --bench raw_performance bench_pool --no-fail-fast --  --exact -Z unstable-options --show-output
 //windows:
@@ -82,7 +81,7 @@ pub fn block_on<T,R>(task: T)-> R
 #[test]
 fn bench_pool() {
     use async_trait::async_trait;
-    use fast_pool::{Pool, Manager};
+    use fast_pool::{Manager, Pool};
 
     pub struct TestManager {}
 
@@ -102,10 +101,8 @@ fn bench_pool() {
     let f = async {
         let p = Pool::new(TestManager {});
         rbench!(100000, {
-              let v = p.get().await.unwrap();
+            let v = p.get().await.unwrap();
         });
     };
     block_on(f);
 }
-
-

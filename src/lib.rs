@@ -1,9 +1,9 @@
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
+use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -47,15 +47,22 @@ impl<M: Manager> Pool<M> {
             let connections = self.in_use.load(Ordering::SeqCst) + self.sender.len() as u64;
             if connections < self.max_open.load(Ordering::SeqCst) {
                 let conn = self.manager.connect().await?;
-                self.sender.send(conn).map_err(|e| M::Error::from(&e.to_string()))?;
+                self.sender
+                    .send(conn)
+                    .map_err(|e| M::Error::from(&e.to_string()))?;
             }
-            self.receiver.recv_async().await.map_err(|e| M::Error::from(&e.to_string()))
+            self.receiver
+                .recv_async()
+                .await
+                .map_err(|e| M::Error::from(&e.to_string()))
         };
         let mut conn = {
             if d.is_none() {
                 f.await?
             } else {
-                tokio::time::timeout(d.unwrap(), f).await.map_err(|_e| M::Error::from("get_timeout"))??
+                tokio::time::timeout(d.unwrap(), f)
+                    .await
+                    .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
         //check connection
@@ -78,7 +85,7 @@ impl<M: Manager> Pool<M> {
     pub async fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
-            connections: self.in_use.load(Ordering::Relaxed)+self.sender.len() as u64,
+            connections: self.in_use.load(Ordering::Relaxed) + self.sender.len() as u64,
             in_use: self.in_use.load(Ordering::Relaxed),
         }
     }
@@ -135,10 +142,10 @@ pub struct State {
 
 #[cfg(test)]
 mod test {
+    use crate::{Manager, Pool};
+    use async_trait::async_trait;
     use std::ops::Deref;
     use std::time::Duration;
-    use async_trait::async_trait;
-    use crate::{Pool, Manager};
 
     pub struct TestManager {}
 
@@ -152,7 +159,7 @@ mod test {
         }
 
         async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
-            if conn=="error"{
+            if conn == "error" {
                 return Err(Self::Error::from(&conn));
             }
             Ok(conn)
@@ -182,7 +189,10 @@ mod test {
             println!("{},{}", i, v.deref());
             arr.push(v);
         }
-        assert_eq!(p.get_timeout(Some(Duration::from_secs(0))).await.is_err(), true);
+        assert_eq!(
+            p.get_timeout(Some(Duration::from_secs(0))).await.is_err(),
+            true
+        );
     }
 
     #[tokio::test]
@@ -193,7 +203,7 @@ mod test {
         *v.inner.as_mut().unwrap() = "error".to_string();
         for _i in 0..10 {
             let v = p.get().await.unwrap();
-            assert_eq!(v.deref()=="error",false);
+            assert_eq!(v.deref() == "error", false);
         }
     }
 }
