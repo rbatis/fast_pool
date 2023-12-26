@@ -93,7 +93,7 @@ impl<M: Manager> Pool<M> {
 }
 
 pub struct ConnectionBox<M: Manager> {
-    inner: Option<M::Connection>,
+    pub inner: Option<M::Connection>,
     sender: Sender<M::Connection>,
     in_use: Arc<AtomicU64>,
 }
