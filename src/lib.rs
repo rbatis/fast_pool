@@ -154,6 +154,7 @@ mod test {
     #[tokio::test]
     async fn test_pool_get() {
         let p = Pool::new(TestManager {});
+        p.set_max_open(10).await;
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
@@ -165,7 +166,7 @@ mod test {
     #[tokio::test]
     async fn test_pool_get_timeout() {
         let p = Pool::new(TestManager {});
-        p.set_max_open(10);
+        p.set_max_open(10).await;
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();

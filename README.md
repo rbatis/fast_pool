@@ -54,7 +54,7 @@ async-trait = "0.1"
     #[tokio::main]
     async fn main() {
         let pool = Pool::new(TestManager {});
-        pool.set_max_open(10);
+        pool.set_max_open(10).await;
         for i in 0..10 {
             let v = pool.get().await.unwrap();
             println!("{},{}", i, v.deref());
