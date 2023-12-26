@@ -1,0 +1,20 @@
+[package]
+name = "fast_pool"
+version = "0.1.0"
+edition = "2021"
+description = "The Fast Pool based on channel"
+readme = "README.md"
+authors = ["ce <zhuxiujia@qq.com>"]
+license = "GPL-3"
+categories = ["caching"]
+keywords = ["database", "orm", "pool"]
+documentation = ""
+repository = "https://github.com/rbatis/fast_pool"
+homepage = "https://github.com/rbatis/fast_pool"
+
+[dependencies]
+async-trait = "0.1"
+futures-core = { version = "0.3" }
+flume = "0.11.0"
+tokio = {version = "1",features = ["time","rt-multi-thread"]}
+[dev-dependencies]
