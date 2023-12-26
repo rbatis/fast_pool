@@ -84,7 +84,7 @@ impl<M: Manager> Pool<M> {
         })
     }
 
-    pub async fn state(&self) -> State {
+    pub fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
             connections: self.in_use.load(Ordering::Relaxed) + self.sender.len() as u64,
@@ -92,7 +92,7 @@ impl<M: Manager> Pool<M> {
         }
     }
 
-    pub async fn set_max_open(&self, n: u64) {
+    pub fn set_max_open(&self, n: u64) {
         let open = self.sender.len() as u64;
         if open > n {
             let del = open - n;
@@ -172,7 +172,7 @@ mod test {
     #[tokio::test]
     async fn test_pool_get() {
         let p = Pool::new(TestManager {});
-        p.set_max_open(10).await;
+        p.set_max_open(10);
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
@@ -184,7 +184,7 @@ mod test {
     #[tokio::test]
     async fn test_pool_get_timeout() {
         let p = Pool::new(TestManager {});
-        p.set_max_open(10).await;
+        p.set_max_open(10);
         let mut arr = vec![];
         for i in 0..10 {
             let v = p.get().await.unwrap();
@@ -200,7 +200,7 @@ mod test {
     #[tokio::test]
     async fn test_pool_check() {
         let p = Pool::new(TestManager {});
-        p.set_max_open(10).await;
+        p.set_max_open(10);
         let mut v = p.get().await.unwrap();
         *v.inner.as_mut().unwrap() = "error".to_string();
         for _i in 0..10 {
