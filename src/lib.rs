@@ -190,7 +190,8 @@ mod test {
         let mut v = p.get().await.unwrap();
         *v.inner.as_mut().unwrap() = "error".to_string();
         for _i in 0..10 {
-            let _v = p.get().await.unwrap();
+            let v = p.get().await.unwrap();
+            assert_eq!(v.deref()=="error",false);
         }
     }
 }
