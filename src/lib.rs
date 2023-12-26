@@ -21,7 +21,9 @@ pub trait Manager {
 
     type Error: for<'a> From<&'a str>;
 
+    ///create Connection and check Connection
     async fn connect(&self) -> Result<Self::Connection, Self::Error>;
+    ///check Connection is alive? if not return Error(Connection will be drop)
     async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error>;
 }
 
