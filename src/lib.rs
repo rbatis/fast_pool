@@ -5,10 +5,10 @@ use std::time::Duration;
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 
-pub struct Pool<Manager: Manager> {
-    manager: Manager,
-    sender: Sender<Manager::Connection>,
-    receiver: Receiver<Manager::Connection>,
+pub struct Pool<M: Manager> {
+    manager: M,
+    sender: Sender<M::Connection>,
+    receiver: Receiver<M::Connection>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
 }
