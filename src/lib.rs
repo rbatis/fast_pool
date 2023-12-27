@@ -2,12 +2,12 @@
 mod defer;
 
 use async_trait::async_trait;
+use flume::{Receiver, Sender};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use flume::{Receiver, Sender};
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -134,11 +134,11 @@ impl<M: Manager> Pool<M> {
 
     pub fn set_max_open(&self, n: u64) {
         self.max_open.store(n, Ordering::SeqCst);
-        let open = self.idle_send.len() as u64;
-        if open > n {
-            let del = open - n;
-            for _ in 0..del {
+        loop {
+            if self.idle_send.len() > n as usize {
                 _ = self.idle_recv.try_recv();
+            } else {
+                break;
             }
         }
     }
