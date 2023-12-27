@@ -1,18 +1,32 @@
+#[macro_use]
+mod defer;
+
 use async_trait::async_trait;
-use flume::{Receiver, Sender};
+use crossfire::mpmc::{RxUnbounded, TxUnbounded};
+use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
-#[derive(Debug)]
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
-    idle_send: Sender<M::Connection>,
-    idle_recv: Receiver<M::Connection>,
+    idle_send: Arc<TxUnbounded<M::Connection>>,
+    idle_recv: Arc<RxUnbounded<M::Connection>>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
+    waits: Arc<AtomicU64>,
+}
+
+impl<M: Manager> Debug for Pool<M> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pool")
+            // .field("manager", &self.manager)
+            .field("max_open", &self.max_open)
+            .field("in_use", &self.in_use)
+            .finish()
+    }
 }
 
 impl<M: Manager> Clone for Pool<M> {
@@ -23,6 +37,7 @@ impl<M: Manager> Clone for Pool<M> {
             idle_recv: self.idle_recv.clone(),
             max_open: self.max_open.clone(),
             in_use: self.in_use.clone(),
+            waits: self.waits.clone(),
         }
     }
 }
@@ -41,15 +56,19 @@ pub trait Manager {
 }
 
 impl<M: Manager> Pool<M> {
-    pub fn new(m: M) -> Self {
+    pub fn new(m: M) -> Self
+    where
+        <M as Manager>::Connection: Unpin,
+    {
         let default_max = num_cpus::get() as u64 * 4;
-        let (s, r) = flume::unbounded();
+        let (s, r) = crossfire::mpmc::unbounded_future();
         Self {
             manager: Arc::new(m),
-            idle_send: s,
-            idle_recv: r,
+            idle_send: Arc::new(s),
+            idle_recv: Arc::new(r),
             max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
+            waits: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -58,6 +77,10 @@ impl<M: Manager> Pool<M> {
     }
 
     pub async fn get_timeout(&self, d: Option<Duration>) -> Result<ConnectionBox<M>, M::Error> {
+        self.waits.fetch_add(1, Ordering::SeqCst);
+        defer!(|| {
+            self.waits.fetch_sub(1, Ordering::SeqCst);
+        });
         //pop connection from channel
         let f = async {
             let connections = self.in_use.load(Ordering::SeqCst) + self.idle_send.len() as u64;
@@ -68,7 +91,7 @@ impl<M: Manager> Pool<M> {
                     .map_err(|e| M::Error::from(&e.to_string()))?;
             }
             self.idle_recv
-                .recv_async()
+                .recv()
                 .await
                 .map_err(|e| M::Error::from(&e.to_string()))
         };
@@ -105,6 +128,7 @@ impl<M: Manager> Pool<M> {
             connections: self.in_use.load(Ordering::Relaxed) + self.idle_send.len() as u64,
             in_use: self.in_use.load(Ordering::Relaxed),
             idle: self.idle_send.len() as u64,
+            waits: self.waits.load(Ordering::Relaxed),
         }
     }
 
@@ -120,12 +144,22 @@ impl<M: Manager> Pool<M> {
     }
 }
 
-#[derive(Debug)]
 pub struct ConnectionBox<M: Manager> {
     pub inner: Option<M::Connection>,
-    sender: Sender<M::Connection>,
+    sender: Arc<TxUnbounded<M::Connection>>,
     in_use: Arc<AtomicU64>,
     max_open: Arc<AtomicU64>,
+}
+
+impl<M: Manager> Debug for ConnectionBox<M> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectionBox")
+            // .field("manager", &self.manager)
+            // .field("inner", &self.inner)
+            .field("in_use", &self.in_use)
+            .field("max_open", &self.max_open)
+            .finish()
+    }
 }
 
 impl<M: Manager> Deref for ConnectionBox<M> {
@@ -164,4 +198,6 @@ pub struct State {
     pub in_use: u64,
     /// idle connection
     pub idle: u64,
+    /// wait get connections number
+    pub waits: u64,
 }
