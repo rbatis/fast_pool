@@ -33,6 +33,13 @@ mod test {
         println!("{:?}", p);
     }
 
+    #[tokio::test]
+    async fn test_clone() {
+        let p = Pool::new(TestManager {});
+        let p2 = p.clone();
+        assert_eq!(p.state(), p2.state());
+    }
+
     // --nocapture
     #[tokio::test]
     async fn test_pool_get() {

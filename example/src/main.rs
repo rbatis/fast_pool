@@ -1,7 +1,7 @@
-use std::ops::{DerefMut};
-use std::time::Duration;
 use async_trait::async_trait;
 use fast_pool::{Manager, Pool};
+use std::ops::DerefMut;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct TestManager {}
@@ -27,12 +27,12 @@ impl Manager for TestManager {
 #[tokio::main]
 async fn main() {
     let p = Pool::new(TestManager {});
-    println!("status = {:?}",p.state());
+    println!("status = {:?}", p.state());
     p.set_max_open(10);
-    println!("status = {:?}",p.state());
+    println!("status = {:?}", p.state());
 
     let mut conn = p.get().await.unwrap();
-    println!("conn = {}",conn.deref_mut());
+    println!("conn = {}", conn.deref_mut());
     let mut conn = p.get_timeout(Some(Duration::from_secs(1))).await.unwrap();
-    println!("conn = {}",conn.deref_mut());
+    println!("conn = {}", conn.deref_mut());
 }

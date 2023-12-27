@@ -154,7 +154,7 @@ impl<M: Manager> Drop for ConnectionBox<M> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct State {
     /// max open limit
     pub max_open: u64,
