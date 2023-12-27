@@ -57,8 +57,8 @@ pub trait Manager {
 
 impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self
-    where
-        <M as Manager>::Connection: Unpin,
+        where
+            <M as Manager>::Connection: Unpin,
     {
         let default_max = num_cpus::get() as u64 * 4;
         let (s, r) = flume::unbounded();
@@ -133,6 +133,9 @@ impl<M: Manager> Pool<M> {
     }
 
     pub fn set_max_open(&self, n: u64) {
+        if n == 0 {
+            return;
+        }
         self.max_open.store(n, Ordering::SeqCst);
         loop {
             if self.idle_send.len() > n as usize {
