@@ -57,8 +57,8 @@ pub trait Manager {
 
 impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self
-        where
-            <M as Manager>::Connection: Unpin,
+    where
+        <M as Manager>::Connection: Unpin,
     {
         let default_max = num_cpus::get() as u64 * 4;
         let (s, r) = flume::unbounded();
@@ -157,7 +157,7 @@ pub struct ConnectionBox<M: Manager> {
 impl<M: Manager> Debug for ConnectionBox<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionBox")
-            // .field("manager", &self.manager)
+            .field("sender", &self.sender)
             // .field("inner", &self.inner)
             .field("in_use", &self.in_use)
             .field("max_open", &self.max_open)
