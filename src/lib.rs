@@ -2,18 +2,18 @@
 mod defer;
 
 use async_trait::async_trait;
-use crossfire::mpmc::{RxUnbounded, TxUnbounded};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use flume::{Receiver, Sender};
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
-    idle_send: Arc<TxUnbounded<M::Connection>>,
-    idle_recv: Arc<RxUnbounded<M::Connection>>,
+    idle_send: Arc<Sender<M::Connection>>,
+    idle_recv: Arc<Receiver<M::Connection>>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
     waits: Arc<AtomicU64>,
@@ -61,7 +61,7 @@ impl<M: Manager> Pool<M> {
         <M as Manager>::Connection: Unpin,
     {
         let default_max = num_cpus::get() as u64 * 4;
-        let (s, r) = crossfire::mpmc::unbounded_future();
+        let (s, r) = flume::unbounded();
         Self {
             manager: Arc::new(m),
             idle_send: Arc::new(s),
@@ -91,7 +91,7 @@ impl<M: Manager> Pool<M> {
                     .map_err(|e| M::Error::from(&e.to_string()))?;
             }
             self.idle_recv
-                .recv()
+                .recv_async()
                 .await
                 .map_err(|e| M::Error::from(&e.to_string()))
         };
@@ -146,7 +146,7 @@ impl<M: Manager> Pool<M> {
 
 pub struct ConnectionBox<M: Manager> {
     pub inner: Option<M::Connection>,
-    sender: Arc<TxUnbounded<M::Connection>>,
+    sender: Arc<Sender<M::Connection>>,
     in_use: Arc<AtomicU64>,
     max_open: Arc<AtomicU64>,
 }

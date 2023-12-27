@@ -8,7 +8,7 @@
 a fast async pool based on channel
 * support `get()`,`get_timeout()`,`state()` methods
 * support atomic max_open(Resize freely)
-* based on [crossbeam channel(crossfire)](https://crates.io/crates/crossfire)
+* based on [flume](https://crates.io/crates/flume)
 
 ### way fast_pool?
 
