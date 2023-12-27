@@ -1,4 +1,10 @@
 # fast_pool
+
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+[![GitHub release](https://img.shields.io/github/v/release/rbatis/fast_pool)](https://github.com/rbatis/fast_pool/releases)
+
+<img style="width: 200px;height: 200px;" width="200" height="200" src="https://github.com/rbatis/rbatis/raw/master/logo.png" />
+
 a fast async pool based on channel
 * support `get()`,`get_timeout()`,`state()` methods
 * support atomic max_open(Resize freely)
