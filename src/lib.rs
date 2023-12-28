@@ -82,30 +82,35 @@ impl<M: Manager> Pool<M> {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
         //pop connection from channel
+
         let f = async {
-            let idle = self.idle_send.len() as u64;
-            let connections = self.in_use.load(Ordering::SeqCst) + idle;
-            if connections < self.max_open.load(Ordering::SeqCst) {
-                let conn = self.manager.connect().await?;
-                self.idle_send
-                    .send(conn)
+            loop {
+                let idle = self.idle_send.len() as u64;
+                let connections = self.in_use.load(Ordering::SeqCst) + idle;
+                if connections < self.max_open.load(Ordering::SeqCst) {
+                    //create connection
+                    let conn = self.manager.connect().await?;
+                    self.idle_send
+                        .send(conn)
+                        .map_err(|e| M::Error::from(&e.to_string()))?;
+                }
+                let mut conn = self
+                    .idle_recv
+                    .recv_async()
+                    .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
-            }
-            let mut conn = self
-                .idle_recv
-                .recv_async()
-                .await
-                .map_err(|e| M::Error::from(&e.to_string()))?;
-            //check connection
-            match self.manager.check(&mut conn).await {
-                Ok(_) => Ok(conn),
-                Err(_e) => {
-                    //TODO some thing need return e?
-                    if false {
-                        return Err(_e);
+                //check connection
+                match self.manager.check(&mut conn).await {
+                    Ok(_) => {
+                        break Ok(conn);
                     }
-                    conn = self.manager.connect().await?;
-                    Ok(conn)
+                    Err(_e) => {
+                        //TODO some thing need return e?
+                        if false {
+                            return Err(_e);
+                        }
+                        continue;
+                    }
                 }
             }
         };
