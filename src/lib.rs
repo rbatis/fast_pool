@@ -99,7 +99,7 @@ impl<M: Manager> Pool<M> {
             //check connection
             match self.manager.check(&mut conn).await {
                 Ok(_) => Ok(conn),
-                Err(e) => {
+                Err(_e) => {
                     //TODO some thing need return e?
                     // if false {
                     //     return Err(e);
