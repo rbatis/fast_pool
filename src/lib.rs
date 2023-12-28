@@ -57,8 +57,8 @@ pub trait Manager {
 
 impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self
-        where
-            <M as Manager>::Connection: Unpin,
+    where
+        <M as Manager>::Connection: Unpin,
     {
         let default_max = num_cpus::get() as u64 * 4;
         let (s, r) = flume::unbounded();
@@ -91,27 +91,23 @@ impl<M: Manager> Pool<M> {
                     .send(conn)
                     .map_err(|e| M::Error::from(&e.to_string()))?;
             }
-            let mut conn = self.idle_recv
+            let mut conn = self
+                .idle_recv
                 .recv_async()
                 .await
                 .map_err(|e| M::Error::from(&e.to_string()))?;
             //check connection
-            loop {
-                match self.manager.check(&mut conn).await {
-                    Ok(_) => {
-                        self.in_use.fetch_add(1, Ordering::SeqCst);
-                        break;
+            match self.manager.check(&mut conn).await {
+                Ok(_) => Ok(conn),
+                Err(e) => {
+                    //TODO some thing need return e?
+                    if false {
+                        return Err(e);
                     }
-                    Err(err) => {
-                        //TODO should log error?
-                        if false {
-                            return Err(err);
-                        }
-                        continue;
-                    }
+                    conn = self.manager.connect().await?;
+                    Ok(conn)
                 }
             }
-            Ok(conn)
         };
         let conn = {
             if d.is_none() {
@@ -122,6 +118,7 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
+        self.in_use.fetch_add(1, Ordering::SeqCst);
         Ok(ConnectionBox {
             inner: Some(conn),
             sender: self.idle_send.clone(),
