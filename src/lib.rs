@@ -101,10 +101,11 @@ impl<M: Manager> Pool<M> {
                 Ok(_) => Ok(conn),
                 Err(_e) => {
                     //TODO some thing need return e?
-                    // if false {
-                    //     return Err(e);
-                    // }
-                    self.manager.connect().await
+                    if false {
+                        return Err(_e);
+                    }
+                    conn = self.manager.connect().await?;
+                    Ok(conn)
                 }
             }
         };
