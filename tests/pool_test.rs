@@ -51,6 +51,17 @@ async fn test_pool_get() {
 }
 
 #[tokio::test]
+async fn test_pool_get2() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(10);
+    for i in 0..3 {
+        let v = p.get().await.unwrap();
+        println!("{},{}", i, v.deref());
+    }
+    assert_eq!(p.state().idle, 3);
+}
+
+#[tokio::test]
 async fn test_pool_get_timeout() {
     let p = Pool::new(TestManager {});
     p.set_max_open(10);

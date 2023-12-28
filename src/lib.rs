@@ -82,13 +82,12 @@ impl<M: Manager> Pool<M> {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
         //pop connection from channel
-
         let f = async {
             loop {
                 let idle = self.idle_send.len() as u64;
                 let connections = self.in_use.load(Ordering::SeqCst) + idle;
                 if connections < self.max_open.load(Ordering::SeqCst) {
-                    //create connection
+                    //create connection,this can limit max idle,current now max idle = max_open
                     let conn = self.manager.connect().await?;
                     self.idle_send
                         .send(conn)
