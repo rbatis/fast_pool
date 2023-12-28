@@ -94,8 +94,8 @@ fn bench_pool() {
             Ok(0)
         }
 
-        async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
-            Ok(conn)
+        async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
+            Ok(())
         }
     }
     let f = async {

@@ -52,13 +52,13 @@ pub trait Manager {
     ///create Connection and check Connection
     async fn connect(&self) -> Result<Self::Connection, Self::Error>;
     ///check Connection is alive? if not return Error(Connection will be drop)
-    async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error>;
+    async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error>;
 }
 
 impl<M: Manager> Pool<M> {
     pub fn new(m: M) -> Self
-    where
-        <M as Manager>::Connection: Unpin,
+        where
+            <M as Manager>::Connection: Unpin,
     {
         let default_max = num_cpus::get() as u64 * 4;
         let (s, r) = flume::unbounded();
@@ -83,19 +83,37 @@ impl<M: Manager> Pool<M> {
         });
         //pop connection from channel
         let f = async {
-            let connections = self.in_use.load(Ordering::SeqCst) + self.idle_send.len() as u64;
+            let idle = self.idle_send.len() as u64;
+            let connections = self.in_use.load(Ordering::SeqCst) + idle;
             if connections < self.max_open.load(Ordering::SeqCst) {
                 let conn = self.manager.connect().await?;
                 self.idle_send
                     .send(conn)
                     .map_err(|e| M::Error::from(&e.to_string()))?;
             }
-            self.idle_recv
+            let mut conn = self.idle_recv
                 .recv_async()
                 .await
-                .map_err(|e| M::Error::from(&e.to_string()))
+                .map_err(|e| M::Error::from(&e.to_string()))?;
+            //check connection
+            loop {
+                match self.manager.check(&mut conn).await {
+                    Ok(_) => {
+                        self.in_use.fetch_add(1, Ordering::SeqCst);
+                        break;
+                    }
+                    Err(err) => {
+                        //TODO should log error?
+                        if false {
+                            return Err(err);
+                        }
+                        continue;
+                    }
+                }
+            }
+            Ok(conn)
         };
-        let mut conn = {
+        let conn = {
             if d.is_none() {
                 f.await?
             } else {
@@ -104,16 +122,6 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        //check connection
-        match self.manager.check(conn).await {
-            Ok(v) => {
-                conn = v;
-                self.in_use.fetch_add(1, Ordering::SeqCst);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
         Ok(ConnectionBox {
             inner: Some(conn),
             sender: self.idle_send.clone(),

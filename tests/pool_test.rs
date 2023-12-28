@@ -15,11 +15,11 @@ impl Manager for TestManager {
         Ok(String::new())
     }
 
-    async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
+    async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         if conn == "error" {
-            return Err(Self::Error::from(&conn));
+            return Err(Self::Error::from(&conn.to_string()));
         }
-        Ok(conn)
+        Ok(())
     }
 }
 
