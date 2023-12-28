@@ -60,7 +60,7 @@ impl<M: Manager> Pool<M> {
     where
         <M as Manager>::Connection: Unpin,
     {
-        let default_max = num_cpus::get() as u64 * 4;
+        let default_max = num_cpus::get() as u64;
         let (s, r) = flume::unbounded();
         Self {
             manager: Arc::new(m),
