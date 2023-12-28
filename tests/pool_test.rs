@@ -12,11 +12,12 @@ impl Manager for TestManager {
     type Error = String;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+        println!("new Connection");
         Ok(String::new())
     }
 
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        if conn == "error" {
+        if conn != "" {
             return Err(Self::Error::from(&conn.to_string()));
         }
         Ok(())
@@ -142,10 +143,12 @@ async fn test_concurrent_access() {
 #[tokio::test]
 async fn test_invalid_connection() {
     let p = Pool::new(TestManager {});
-    p.set_max_open(10);
+    p.set_max_open(1);
 
     let mut conn = p.get().await.unwrap();
+    //conn timeout
     *conn.inner.as_mut().unwrap() = "error".to_string();
+    drop(conn);
 
     // Attempt to get a new connection, should not be the invalid one
     let new_conn = p.get().await.unwrap();
