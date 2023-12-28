@@ -18,7 +18,7 @@ impl Manager for TestManager {
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         //check should use conn.ping()
         if conn == "error" {
-            return Err(Self::Error::from(&conn));
+            return Err(Self::Error::from("error".to_string()));
         }
         Ok(())
     }
