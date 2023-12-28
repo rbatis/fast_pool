@@ -64,9 +64,9 @@ impl Manager for TestManager {
 #[tokio::main]
 async fn main() {
     let p = Pool::new(TestManager {});
-    println!("status = {:?}",p.state());
+    println!("status = {}",p.state());
     p.set_max_open(10);
-    println!("status = {:?}",p.state());
+    println!("status = {}",p.state());
 
     let mut conn = p.get().await.unwrap();
     println!("conn = {}",conn.deref_mut());

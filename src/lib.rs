@@ -3,7 +3,7 @@ mod defer;
 
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -213,4 +213,14 @@ pub struct State {
     pub idle: u64,
     /// wait get connections number
     pub waits: u64,
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, waits: {} }}",
+            self.max_open, self.connections, self.in_use, self.idle, self.waits
+        )
+    }
 }
