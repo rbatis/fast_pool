@@ -52,12 +52,12 @@ impl Manager for TestManager {
         Ok("conn".to_string())
     }
 
-    async fn check(&self, conn: Self::Connection) -> Result<Self::Connection, Self::Error> {
+    async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         //check should use conn.ping()
         if conn == "error" {
-            return Err(Self::Error::from(&conn));
+            return Err(Self::Error::from("error".to_string()));
         }
-        Ok(conn)
+        Ok(())
     }
 }
 
