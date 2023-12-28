@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use fast_pool::{Manager, Pool};
 use std::ops::Deref;
 use std::time::Duration;
@@ -6,7 +5,6 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct TestManager {}
 
-#[async_trait]
 impl Manager for TestManager {
     type Connection = String;
     type Error = String;

@@ -43,7 +43,6 @@ use fast_pool::{Manager, Pool};
 #[derive(Debug)]
 pub struct TestManager {}
 
-#[async_trait]
 impl Manager for TestManager {
     type Connection = String;
     type Error = String;

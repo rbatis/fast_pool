@@ -6,7 +6,6 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct TestManager {}
 
-#[async_trait]
 impl Manager for TestManager {
     type Connection = String;
     type Error = String;

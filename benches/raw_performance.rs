@@ -85,7 +85,6 @@ fn bench_pool() {
 
     pub struct TestManager {}
 
-    #[async_trait]
     impl Manager for TestManager {
         type Connection = i32;
         type Error = String;

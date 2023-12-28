@@ -1,7 +1,8 @@
+#![allow(async_fn_in_trait)]
+
 #[macro_use]
 mod defer;
 
-use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -43,7 +44,6 @@ impl<M: Manager> Clone for Pool<M> {
 }
 
 /// Manager create Connection and check Connection
-#[async_trait]
 pub trait Manager {
     type Connection;
 
