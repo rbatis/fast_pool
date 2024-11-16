@@ -99,11 +99,14 @@ impl<M: Manager> Pool<M> {
                     .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
                 //check connection
+                self.in_use.fetch_add(1, Ordering::SeqCst);
                 match self.manager.check(&mut conn).await {
                     Ok(_) => {
                         break Ok(conn);
                     }
                     Err(_e) => {
+                        drop(conn);
+                        self.in_use.fetch_sub(1, Ordering::SeqCst);
                         //TODO some thing need return e?
                         if false {
                             return Err(_e);
@@ -122,7 +125,6 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        self.in_use.fetch_add(1, Ordering::SeqCst);
         Ok(ConnectionBox {
             inner: Some(conn),
             sender: self.idle_send.clone(),
