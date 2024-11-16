@@ -107,6 +107,9 @@ impl<M: Manager> Pool<M> {
                     Err(_e) => {
                         drop(conn);
                         self.in_use.fetch_sub(1, Ordering::SeqCst);
+                        if false {
+                            return Err(_e);
+                        }
                         continue;
                     }
                 }
