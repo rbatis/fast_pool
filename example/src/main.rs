@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use fast_pool::{Manager, Pool};
 use std::ops::DerefMut;
 use std::time::Duration;
