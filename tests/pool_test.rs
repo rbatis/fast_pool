@@ -475,3 +475,29 @@ async fn test_high_concurrency_long_connections() {
     // Verify all connections are idle now
     assert_eq!(p.state().in_use, 0);
 }
+
+
+#[tokio::test]
+async fn test_concurrent_create_connection_less_for_max_open() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(10);
+    for _ in 0..1000{
+        let p1 = p.clone();
+        tokio::spawn(async move {
+            loop{
+                let result = p1.get().await.unwrap();
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                drop(result);
+            }
+        });
+    }
+    for _ in 0..5{
+        let state = p.state();
+        println!("max_open: {}, connections: {}, in_use: {}, idle: {}, waits: {}",
+                 state.max_open, state.connections, state.in_use, state.idle, state.waits);
+        assert_eq!(state.connections <= state.max_open, true);
+        assert_eq!(state.in_use <= state.max_open, true);
+        assert_eq!(state.idle <= state.max_open, true);
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
