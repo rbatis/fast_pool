@@ -18,6 +18,7 @@ pub struct Pool<M: Manager> {
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
     waits: Arc<AtomicU64>,
+    connections: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -39,6 +40,7 @@ impl<M: Manager> Clone for Pool<M> {
             max_open: self.max_open.clone(),
             in_use: self.in_use.clone(),
             waits: self.waits.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
@@ -69,6 +71,7 @@ impl<M: Manager> Pool<M> {
             max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
             waits: Arc::new(AtomicU64::new(0)),
+            connections: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -81,12 +84,11 @@ impl<M: Manager> Pool<M> {
         defer!(|| {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
-        //pop connection from channel
         let f = async {
             loop {
-                let idle = self.idle_send.len() as u64;
-                let connections = self.in_use.load(Ordering::SeqCst) + idle;
+                let connections = self.connections.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
+                    self.connections.fetch_add(1, Ordering::SeqCst);
                     //create connection,this can limit max idle,current now max idle = max_open
                     let conn = self.manager.connect().await?;
                     self.idle_send
