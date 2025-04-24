@@ -90,10 +90,15 @@ impl<M: Manager> Pool<M> {
                 if connections < self.max_open.load(Ordering::SeqCst) {
                     self.connections.fetch_add(1, Ordering::SeqCst);
                     //create connection,this can limit max idle,current now max idle = max_open
-                    let conn = self.manager.connect().await?;
+                    let conn = self.manager.connect().await.map_err(|e|{
+                        self.connections.fetch_sub(1, Ordering::SeqCst);
+                        e})?;
                     self.idle_send
                         .send(conn)
-                        .map_err(|e| M::Error::from(&e.to_string()))?;
+                        .map_err(|e| M::Error::from(&e.to_string()))
+                        .map_err(|e|{
+                            self.connections.fetch_sub(1, Ordering::SeqCst);
+                            e})?;
                 }
                 let mut conn = self
                     .idle_recv
