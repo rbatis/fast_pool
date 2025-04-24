@@ -81,89 +81,40 @@ impl<M: Manager> Pool<M> {
         defer!(|| {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
-        
-        // Flag to determine if we need to create a new connection
-        let mut should_try_create = true;
-        
-        // Try to get a connection from the pool with timeout
+        //pop connection from channel
         let f = async {
             loop {
-                // First determine if we can create a new connection
-                // This matches the original behavior better for test cases
                 let idle = self.idle_send.len() as u64;
-                let in_use = self.in_use.load(Ordering::SeqCst);
-                let connections = in_use + idle;
-                let max_open = self.max_open.load(Ordering::SeqCst);
-                
-                // Prefer creating new connections until we hit the limit
-                // This is important for test_pool_get2 and test_concurrent_access
-                if connections < max_open && should_try_create {
-                    should_try_create = false; // Only try once per iteration
-                    
-                    // Acquire a slot using atomic operations to avoid race conditions
-                    if let Ok(_) = self.in_use.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
-                        if v + idle < max_open { Some(v + 1) } else { None }
-                    }) {
-                        // Successfully acquired a slot, create a new connection
-                        match self.manager.connect().await {
-                            Ok(conn) => {
-                                // For tests like test_pool_get2 and test_concurrent_access
-                                return Ok(conn);
-                            }
-                            Err(e) => {
-                                // Failed to create, release the slot
-                                self.in_use.fetch_sub(1, Ordering::SeqCst);
-                                if idle == 0 {
-                                    // No idle connections available, return error
-                                    return Err(e);
-                                }
-                                // Otherwise try to get an idle connection
-                            }
-                        }
-                    }
+                let connections = self.in_use.load(Ordering::SeqCst) + idle;
+                if connections < self.max_open.load(Ordering::SeqCst) {
+                    //create connection,this can limit max idle,current now max idle = max_open
+                    let conn = self.manager.connect().await?;
+                    self.idle_send
+                        .send(conn)
+                        .map_err(|e| M::Error::from(&e.to_string()))?;
                 }
-                
-                // If we couldn't create a new connection or at capacity, try to get from the idle pool
-                if let Ok(mut conn) = self.idle_recv.try_recv() {
-                    self.in_use.fetch_add(1, Ordering::SeqCst);
-                    match self.manager.check(&mut conn).await {
-                        Ok(_) => return Ok(conn),
-                        Err(_e) => {
-                            // Connection check failed, drop and try again
-                            drop(conn);
-                            self.in_use.fetch_sub(1, Ordering::SeqCst);
-                            should_try_create = true; // Try creating again since this connection was bad
-                            continue;
-                        }
+                let mut conn = self
+                    .idle_recv
+                    .recv_async()
+                    .await
+                    .map_err(|e| M::Error::from(&e.to_string()))?;
+                //check connection
+                self.in_use.fetch_add(1, Ordering::SeqCst);
+                match self.manager.check(&mut conn).await {
+                    Ok(_) => {
+                        break Ok(conn);
                     }
-                }
-                
-                // No idle connection immediately available, wait for one to be returned or try to create again
-                if connections < max_open {
-                    // If we're below capacity, try creating again on the next iteration
-                    should_try_create = true;
-                }
-                
-                // Wait for a connection to become available
-                match self.idle_recv.recv_async().await {
-                    Ok(mut conn) => {
-                        self.in_use.fetch_add(1, Ordering::SeqCst);
-                        match self.manager.check(&mut conn).await {
-                            Ok(_) => return Ok(conn),
-                            Err(_e) => {
-                                // Connection check failed, drop and try again
-                                drop(conn);
-                                self.in_use.fetch_sub(1, Ordering::SeqCst);
-                                should_try_create = true; // Try creating again since this connection was bad
-                                continue;
-                            }
+                    Err(_e) => {
+                        drop(conn);
+                        self.in_use.fetch_sub(1, Ordering::SeqCst);
+                        if false {
+                            return Err(_e);
                         }
+                        continue;
                     }
-                    Err(e) => return Err(M::Error::from(&e.to_string())),
                 }
             }
         };
-        
         let conn = {
             if d.is_none() {
                 f.await?
@@ -173,7 +124,6 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        
         Ok(ConnectionBox {
             inner: Some(conn),
             sender: self.idle_send.clone(),
@@ -241,29 +191,12 @@ impl<M: Manager> DerefMut for ConnectionBox<M> {
 
 impl<M: Manager> Drop for ConnectionBox<M> {
     fn drop(&mut self) {
-        // Make sure we only decrement in_use count once
         self.in_use.fetch_sub(1, Ordering::SeqCst);
-        
         if let Some(v) = self.inner.take() {
             let max_open = self.max_open.load(Ordering::SeqCst);
-            let in_use = self.in_use.load(Ordering::SeqCst);
-            let current_idle = self.sender.len() as u64;
-            
-            // For test compatibility, always try to put connection back into the pool
-            // unless we're significantly over the limit
-            if in_use + current_idle < max_open * 2 {
-                // Try sending the connection back to the pool
-                match self.sender.send(v) {
-                    Ok(_) => {
-                        // Connection successfully returned to the pool
-                    }
-                    Err(e) => {
-                        // Failed to return to pool, ensure it's properly closed/dropped
-                        drop(e);
-                    }
-                }
+            if self.sender.len() as u64 + self.in_use.load(Ordering::SeqCst) < max_open {
+                _ = self.sender.send(v);
             }
-            // If the pool is way over capacity, just drop the connection
         }
     }
 }
