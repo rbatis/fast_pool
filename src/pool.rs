@@ -86,7 +86,7 @@ impl<M: Manager> Pool<M> {
                     });
                     //create connection,this can limit max idle,current now max idle = max_open
                     let conn = self.manager.connect().await?;
-                    let v = self
+                    self
                         .idle_send
                         .send(conn)
                         .map_err(|e| M::Error::from(&e.to_string()))?;
