@@ -27,13 +27,13 @@ a fast async pool based on channel
 
 ### how to use this?
 
-* add toml
+* step 1 add toml
 ```toml
 fast_pool="0.1"
 async-trait = "0.1"
 tokio = {version = "1",features = ["time","rt-multi-thread","macros"]}
 ```
-* impl trait
+* step 2 impl trait
 ```rust
 use std::ops::{DerefMut};
 use std::time::Duration;
