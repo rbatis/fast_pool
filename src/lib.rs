@@ -18,7 +18,6 @@ pub struct Pool<M: Manager> {
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
     waits: Arc<AtomicU64>,
-    connections: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -40,7 +39,6 @@ impl<M: Manager> Clone for Pool<M> {
             max_open: self.max_open.clone(),
             in_use: self.in_use.clone(),
             waits: self.waits.clone(),
-            connections: self.connections.clone(),
         }
     }
 }
@@ -71,7 +69,6 @@ impl<M: Manager> Pool<M> {
             max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
             waits: Arc::new(AtomicU64::new(0)),
-            connections: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -86,21 +83,18 @@ impl<M: Manager> Pool<M> {
         });
         let f = async {
             loop {
-                let connections = self.connections.load(Ordering::SeqCst);
+                let connections = self.idle_send.len() as u64 + self.in_use.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
-                    self.connections.fetch_add(1, Ordering::SeqCst);
+                    //Use In_use placeholder when create connection
+                    self.in_use.fetch_add(1, Ordering::SeqCst);
+                    defer!(||{
+                        self.in_use.fetch_sub(1, Ordering::SeqCst);
+                    });
                     //create connection,this can limit max idle,current now max idle = max_open
-                    let conn = self.manager.connect().await.map_err(|e| {
-                        self.connections.fetch_sub(1, Ordering::SeqCst);
-                        e
-                    })?;
+                    let conn = self.manager.connect().await?;
                     self.idle_send
                         .send(conn)
-                        .map_err(|e| M::Error::from(&e.to_string()))
-                        .map_err(|e| {
-                            self.connections.fetch_sub(1, Ordering::SeqCst);
-                            e
-                        })?;
+                        .map_err(|e| M::Error::from(&e.to_string()))?;
                 }
                 let mut conn = self
                     .idle_recv
@@ -114,7 +108,6 @@ impl<M: Manager> Pool<M> {
                     }
                     Err(_e) => {
                         drop(conn);
-                        self.connections.fetch_sub(1, Ordering::SeqCst);
                         if false {
                             return Err(_e);
                         }

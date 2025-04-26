@@ -160,7 +160,7 @@ async fn test_invalid_connection() {
     //conn timeout
     *conn.inner.as_mut().unwrap() = "error".to_string();
     drop(conn);
-
+    println!("pool state: {}", p.state());
     // Attempt to get a new connection, should not be the invalid one
     let new_conn = p.get().await.unwrap();
     assert_ne!(new_conn.deref(), &"error".to_string());
