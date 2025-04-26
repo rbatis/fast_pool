@@ -134,9 +134,7 @@ impl<M: Manager> Pool<M> {
         };
         Ok(ConnectionBox::new(
             conn,
-            self.idle_send.clone(),
-            self.in_use.clone(),
-            self.max_open.clone(),
+            self.clone(),
         ))
     }
 
@@ -167,17 +165,13 @@ impl<M: Manager> Pool<M> {
 
 pub struct ConnectionBox<M: Manager> {
     pub inner: Option<M::Connection>,
-    sender: Arc<Sender<M::Connection>>,
-    in_use: Arc<AtomicU64>,
-    max_open: Arc<AtomicU64>,
+    pool: Pool<M>,
 }
 
 impl<M: Manager> Debug for ConnectionBox<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionBox")
-            .field("sender", &self.sender)
-            .field("in_use", &self.in_use)
-            .field("max_open", &self.max_open)
+            .field("pool", &self.pool)
             .finish()
     }
 }
@@ -199,27 +193,23 @@ impl<M: Manager> DerefMut for ConnectionBox<M> {
 impl<M: Manager> ConnectionBox<M> {
     pub fn new(
         conn: M::Connection,
-        sender: Arc<Sender<M::Connection>>,
-        in_use: Arc<AtomicU64>,
-        max_open: Arc<AtomicU64>,
+        pool: Pool<M>,
     ) -> ConnectionBox<M> {
-        in_use.fetch_add(1, Ordering::SeqCst);
+        pool.in_use.fetch_add(1, Ordering::SeqCst);
         Self {
             inner: Some(conn),
-            sender,
-            in_use,
-            max_open,
+            pool,
         }
     }
 }
 
 impl<M: Manager> Drop for ConnectionBox<M> {
     fn drop(&mut self) {
-        self.in_use.fetch_sub(1, Ordering::SeqCst);
+        self.pool.in_use.fetch_sub(1, Ordering::SeqCst);
         if let Some(v) = self.inner.take() {
-            let max_open = self.max_open.load(Ordering::SeqCst);
-            if self.sender.len() as u64 + self.in_use.load(Ordering::SeqCst) < max_open {
-                _ = self.sender.send(v);
+            let max_open = self.pool.max_open.load(Ordering::SeqCst);
+            if self.pool.idle_send.len() as u64 + self.pool.in_use.load(Ordering::SeqCst) < max_open {
+                _ = self.pool.idle_send.send(v);
             }
         }
     }
