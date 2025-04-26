@@ -163,7 +163,7 @@ pub struct ConnectionGuard<M: Manager> {
 
 impl<M: Manager> Debug for ConnectionGuard<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConnectionBox")
+        f.debug_struct("ConnectionGuard")
             .field("pool", &self.pool)
             .finish()
     }
