@@ -2,13 +2,17 @@
 
 #[macro_use]
 mod defer;
+mod state;
+mod guard;
 
 use flume::{Receiver, Sender};
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Deref, DerefMut};
+use std::fmt::{Debug, Formatter};
+use std::ops::{DerefMut};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use crate::guard::ConnectionGuard;
+use crate::state::State;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -188,76 +192,3 @@ impl<M: Manager> Pool<M> {
     }
 }
 
-/// ConnectionGuard is a wrapper for Connection
-pub struct ConnectionGuard<M: Manager> {
-    pub inner: Option<M::Connection>,
-    pool: Pool<M>,
-}
-
-impl<M: Manager> ConnectionGuard<M> {
-    pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionGuard<M> {
-        pool.in_use.fetch_add(1, Ordering::SeqCst);
-        Self {
-            inner: Some(conn),
-            pool,
-        }
-    }
-}
-
-impl<M: Manager> Debug for ConnectionGuard<M> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ConnectionGuard")
-            .field("pool", &self.pool)
-            .finish()
-    }
-}
-
-impl<M: Manager> Deref for ConnectionGuard<M> {
-    type Target = M::Connection;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner.as_ref().unwrap()
-    }
-}
-
-impl<M: Manager> DerefMut for ConnectionGuard<M> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner.as_mut().unwrap()
-    }
-}
-
-impl<M: Manager> Drop for ConnectionGuard<M> {
-    fn drop(&mut self) {
-        if let Some(v) = self.inner.take() {
-            _ = self.pool.recycle(v);
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct State {
-    /// max open limit
-    pub max_open: u64,
-    /// connections = in_use number + idle number + connecting number
-    pub connections: u64,
-    /// user use connection number
-    pub in_use: u64,
-    /// idle connection
-    pub idle: u64,
-    /// wait get connections number
-    pub waits: u64,
-    /// connecting connections
-    pub connecting: u64,
-    /// checking connections
-    pub checking: u64,
-}
-
-impl Display for State {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, connecting: {}, checking: {}, waits: {} }}",
-            self.max_open, self.connections, self.in_use, self.idle, self.connecting, self.checking, self.waits
-        )
-    }
-}
