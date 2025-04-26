@@ -14,6 +14,18 @@ use std::time::Duration;
 use crate::guard::ConnectionGuard;
 use crate::state::State;
 
+/// Manager create Connection and check Connection
+pub trait Manager {
+    type Connection;
+
+    type Error: for<'a> From<&'a str>;
+
+    ///create Connection and check Connection
+    async fn connect(&self) -> Result<Self::Connection, Self::Error>;
+    ///check Connection is alive? if not return Error(Connection will be drop)
+    async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error>;
+}
+
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
@@ -51,18 +63,6 @@ impl<M: Manager> Clone for Pool<M> {
             connections: self.connections.clone(),
         }
     }
-}
-
-/// Manager create Connection and check Connection
-pub trait Manager {
-    type Connection;
-
-    type Error: for<'a> From<&'a str>;
-
-    ///create Connection and check Connection
-    async fn connect(&self) -> Result<Self::Connection, Self::Error>;
-    ///check Connection is alive? if not return Error(Connection will be drop)
-    async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error>;
 }
 
 impl<M: Manager> Pool<M> {
