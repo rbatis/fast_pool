@@ -29,8 +29,7 @@ a fast async pool based on channel
 
 * step 1 add toml
 ```toml
-fast_pool="0.1"
-async-trait = "0.1"
+fast_pool="0.3"
 tokio = {version = "1",features = ["time","rt-multi-thread","macros"]}
 ```
 * step 2 impl trait
