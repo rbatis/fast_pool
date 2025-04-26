@@ -193,6 +193,7 @@ async fn test_boundary_conditions() {
     // Acquire connections until pool is full
     let conn_1 = p.get().await.unwrap();
     let _conn_2 = p.get().await.unwrap();
+    println!("{}", p.state());
     assert_eq!(p.state().in_use, 2);
 
     // Attempt to acquire another connection (pool is full)

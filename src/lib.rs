@@ -90,15 +90,17 @@ impl<M: Manager> Pool<M> {
                 if connections < self.max_open.load(Ordering::SeqCst) {
                     self.connections.fetch_add(1, Ordering::SeqCst);
                     //create connection,this can limit max idle,current now max idle = max_open
-                    let conn = self.manager.connect().await.map_err(|e|{
+                    let conn = self.manager.connect().await.map_err(|e| {
                         self.connections.fetch_sub(1, Ordering::SeqCst);
-                        e})?;
+                        e
+                    })?;
                     self.idle_send
                         .send(conn)
                         .map_err(|e| M::Error::from(&e.to_string()))
-                        .map_err(|e|{
+                        .map_err(|e| {
                             self.connections.fetch_sub(1, Ordering::SeqCst);
-                            e})?;
+                            e
+                        })?;
                 }
                 let mut conn = self
                     .idle_recv
@@ -106,15 +108,13 @@ impl<M: Manager> Pool<M> {
                     .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
                 //check connection
-                self.in_use.fetch_add(1, Ordering::SeqCst);
                 match self.manager.check(&mut conn).await {
                     Ok(_) => {
                         break Ok(conn);
                     }
                     Err(_e) => {
                         drop(conn);
-                        self.in_use.fetch_sub(1, Ordering::SeqCst);
-                        self.connections.fetch_sub(1,Ordering::SeqCst);
+                        self.connections.fetch_sub(1, Ordering::SeqCst);
                         if false {
                             return Err(_e);
                         }
@@ -132,12 +132,12 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        Ok(ConnectionBox {
-            inner: Some(conn),
-            sender: self.idle_send.clone(),
-            in_use: self.in_use.clone(),
-            max_open: self.max_open.clone(),
-        })
+        Ok(ConnectionBox::new(
+            conn,
+            self.idle_send.clone(),
+            self.in_use.clone(),
+            self.max_open.clone(),
+        ))
     }
 
     pub fn state(&self) -> State {
@@ -176,7 +176,6 @@ impl<M: Manager> Debug for ConnectionBox<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectionBox")
             .field("sender", &self.sender)
-            // .field("inner", &self.inner)
             .field("in_use", &self.in_use)
             .field("max_open", &self.max_open)
             .finish()
@@ -194,6 +193,23 @@ impl<M: Manager> Deref for ConnectionBox<M> {
 impl<M: Manager> DerefMut for ConnectionBox<M> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.inner.as_mut().unwrap()
+    }
+}
+
+impl<M: Manager> ConnectionBox<M> {
+    pub fn new(
+        conn: M::Connection,
+        sender: Arc<Sender<M::Connection>>,
+        in_use: Arc<AtomicU64>,
+        max_open: Arc<AtomicU64>,
+    ) -> ConnectionBox<M> {
+        in_use.fetch_add(1, Ordering::SeqCst);
+        Self {
+            inner: Some(conn),
+            sender,
+            in_use,
+            max_open,
+        }
     }
 }
 
