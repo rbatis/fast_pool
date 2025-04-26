@@ -13,12 +13,14 @@ use std::time::Duration;
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
     manager: Arc<M>,
-    idle_send: Arc<Sender<M::Connection>>,
+    pub idle_send: Arc<Sender<M::Connection>>,
     idle_recv: Arc<Receiver<M::Connection>>,
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
     waits: Arc<AtomicU64>,
     connecting: Arc<AtomicU64>,
+    checking: Arc<AtomicU64>,
+    connections: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -41,6 +43,8 @@ impl<M: Manager> Clone for Pool<M> {
             in_use: self.in_use.clone(),
             waits: self.waits.clone(),
             connecting: self.connecting.clone(),
+            checking: self.checking.clone(),
+            connections: self.connections.clone(),
         }
     }
 }
@@ -72,6 +76,8 @@ impl<M: Manager> Pool<M> {
             in_use: Arc::new(AtomicU64::new(0)),
             waits: Arc::new(AtomicU64::new(0)),
             connecting: Arc::new(AtomicU64::new(0)),
+            checking: Arc::new(AtomicU64::new(0)),
+            connections: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -86,18 +92,27 @@ impl<M: Manager> Pool<M> {
         });
         let f = async {
             let v: Result<M::Connection, M::Error> = loop {
-                let connections = self.idle_send.len() as u64 + self.in_use.load(Ordering::SeqCst) + self.connecting.load(Ordering::SeqCst);
+                let connections = self.connections.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
+                    self.connections.fetch_add(1, Ordering::SeqCst);
                     //Use In_use placeholder when create connection
                     self.connecting.fetch_add(1, Ordering::SeqCst);
                     defer!(|| {
                         self.connecting.fetch_sub(1, Ordering::SeqCst);
                     });
                     //create connection,this can limit max idle,current now max idle = max_open
-                    let conn = self.manager.connect().await?;
-                    self.idle_send
-                        .send(conn)
-                        .map_err(|e| M::Error::from(&e.to_string()))?;
+                    let conn = self.manager.connect().await;
+                    if conn.is_err() {
+                        self.connections.fetch_sub(1, Ordering::SeqCst);
+                    }
+                    let v = self
+                        .idle_send
+                        .send(conn?)
+                        .map_err(|e| M::Error::from(&e.to_string()));
+                    if v.is_err() {
+                        self.connections.fetch_sub(1, Ordering::SeqCst);
+                    }
+                    v?
                 }
                 let mut conn = self
                     .idle_recv
@@ -105,12 +120,17 @@ impl<M: Manager> Pool<M> {
                     .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
                 //check connection
+                self.checking.fetch_add(1, Ordering::SeqCst);
+                defer!(|| {
+                    self.checking.fetch_sub(1, Ordering::SeqCst);
+                });
                 match self.manager.check(&mut conn).await {
                     Ok(_) => {
                         break Ok(conn);
                     }
                     Err(_e) => {
                         drop(conn);
+                        self.connections.fetch_sub(1, Ordering::SeqCst);
                         continue;
                     }
                 }
@@ -132,11 +152,12 @@ impl<M: Manager> Pool<M> {
     pub fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
-            connections: self.in_use.load(Ordering::Relaxed) + self.idle_send.len() as u64,
-            in_use: self.in_use.load(Ordering::Relaxed),
+            connections: self.connections.load(Ordering::Relaxed),
+            in_use: self.in_use.load(Ordering::SeqCst),
             idle: self.idle_send.len() as u64,
-            waits: self.waits.load(Ordering::Relaxed),
-            connecting: self.connecting.load(Ordering::Relaxed),
+            waits: self.waits.load(Ordering::SeqCst),
+            connecting: self.connecting.load(Ordering::SeqCst),
+            checking: self.checking.load(Ordering::SeqCst),
         }
     }
 
@@ -148,9 +169,21 @@ impl<M: Manager> Pool<M> {
         loop {
             if self.idle_send.len() > n as usize {
                 _ = self.idle_recv.try_recv();
+                if self.connections.load(Ordering::SeqCst) > 0 {
+                    self.connections.fetch_sub(1, Ordering::SeqCst);
+                }
             } else {
                 break;
             }
+        }
+    }
+
+    pub fn recycle(&self, arg: M::Connection) {
+        self.in_use.fetch_sub(1, Ordering::SeqCst);
+        if self.idle_send.len() < self.max_open.load(Ordering::SeqCst) as usize {
+            _ = self.idle_send.send(arg);
+        } else {
+            self.connections.fetch_sub(1, Ordering::SeqCst);
         }
     }
 }
@@ -159,6 +192,16 @@ impl<M: Manager> Pool<M> {
 pub struct ConnectionGuard<M: Manager> {
     pub inner: Option<M::Connection>,
     pool: Pool<M>,
+}
+
+impl<M: Manager> ConnectionGuard<M> {
+    pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionGuard<M> {
+        pool.in_use.fetch_add(1, Ordering::SeqCst);
+        Self {
+            inner: Some(conn),
+            pool,
+        }
+    }
 }
 
 impl<M: Manager> Debug for ConnectionGuard<M> {
@@ -183,25 +226,10 @@ impl<M: Manager> DerefMut for ConnectionGuard<M> {
     }
 }
 
-impl<M: Manager> ConnectionGuard<M> {
-    pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionGuard<M> {
-        pool.in_use.fetch_add(1, Ordering::SeqCst);
-        Self {
-            inner: Some(conn),
-            pool,
-        }
-    }
-}
-
 impl<M: Manager> Drop for ConnectionGuard<M> {
     fn drop(&mut self) {
-        self.pool.in_use.fetch_sub(1, Ordering::SeqCst);
         if let Some(v) = self.inner.take() {
-            let max_open = self.pool.max_open.load(Ordering::SeqCst);
-            if self.pool.idle_send.len() as u64 + self.pool.in_use.load(Ordering::SeqCst) < max_open
-            {
-                _ = self.pool.idle_send.send(v);
-            }
+            _ = self.pool.recycle(v);
         }
     }
 }
@@ -220,14 +248,16 @@ pub struct State {
     pub waits: u64,
     /// connecting connections
     pub connecting: u64,
+    /// checking connections
+    pub checking: u64,
 }
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, connecting: {}, waits: {} }}",
-            self.max_open, self.connections, self.in_use, self.idle, self.connecting, self.waits
+            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, connecting: {}, checking: {}, waits: {} }}",
+            self.max_open, self.connections, self.in_use, self.idle, self.connecting, self.checking, self.waits
         )
     }
 }

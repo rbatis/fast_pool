@@ -502,3 +502,45 @@ async fn test_concurrent_create_connection_less_for_max_open() {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
+
+#[tokio::test]
+async fn test_change_max_open() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(4);
+    
+    let c1 = p.get().await.unwrap();
+    let c2 = p.get().await.unwrap();
+    let c3 = p.get().await.unwrap();
+    let c4 = p.get().await.unwrap();
+    
+    p.set_max_open(2);
+    
+    drop(c1);
+    drop(c2);
+    drop(c3);
+    drop(c4);
+    
+    println!("{}",p.state());
+    println!("len {}",p.idle_send.len());
+}
+
+#[tokio::test]
+async fn test_change_max_open2() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(4);
+
+    let c1 = p.get().await.unwrap();
+    let c2 = p.get().await.unwrap();
+    let c3 = p.get().await.unwrap();
+    let c4 = p.get().await.unwrap();
+
+    drop(c1);
+    drop(c2);
+    drop(c3);
+    drop(c4);
+    
+    p.set_max_open(2);
+
+    println!("{}",p.state());
+    println!("len {}",p.idle_send.len());
+}
