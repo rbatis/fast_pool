@@ -77,27 +77,20 @@ impl<M: Manager> Pool<M> {
         });
         let f = async {
             let v: Result<M::Connection, M::Error> = loop {
-                let connections = self.connections.load(Ordering::SeqCst);
+                let connections = self.connections.load(Ordering::SeqCst)+self.connecting.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
-                    self.connections.fetch_add(1, Ordering::SeqCst);
                     //Use In_use placeholder when create connection
                     self.connecting.fetch_add(1, Ordering::SeqCst);
                     defer!(|| {
                         self.connecting.fetch_sub(1, Ordering::SeqCst);
                     });
                     //create connection,this can limit max idle,current now max idle = max_open
-                    let conn = self.manager.connect().await;
-                    if conn.is_err() {
-                        self.connections.fetch_sub(1, Ordering::SeqCst);
-                    }
+                    let conn = self.manager.connect().await?;
                     let v = self
                         .idle_send
-                        .send(conn?)
-                        .map_err(|e| M::Error::from(&e.to_string()));
-                    if v.is_err() {
-                        self.connections.fetch_sub(1, Ordering::SeqCst);
-                    }
-                    v?
+                        .send(conn)
+                        .map_err(|e| M::Error::from(&e.to_string()))?;
+                    self.connections.fetch_add(1, Ordering::SeqCst);
                 }
                 let mut conn = self
                     .idle_recv
