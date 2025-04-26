@@ -18,6 +18,7 @@ pub struct Pool<M: Manager> {
     max_open: Arc<AtomicU64>,
     in_use: Arc<AtomicU64>,
     waits: Arc<AtomicU64>,
+    connecting: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -39,6 +40,7 @@ impl<M: Manager> Clone for Pool<M> {
             max_open: self.max_open.clone(),
             in_use: self.in_use.clone(),
             waits: self.waits.clone(),
+            connecting: self.connecting.clone(),
         }
     }
 }
@@ -69,6 +71,7 @@ impl<M: Manager> Pool<M> {
             max_open: Arc::new(AtomicU64::new(default_max)),
             in_use: Arc::new(AtomicU64::new(0)),
             waits: Arc::new(AtomicU64::new(0)),
+            connecting: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -82,13 +85,13 @@ impl<M: Manager> Pool<M> {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
         let f = async {
-            loop {
-                let connections = self.idle_send.len() as u64 + self.in_use.load(Ordering::SeqCst);
+            let v: Result<M::Connection, M::Error> = loop {
+                let connections = self.idle_send.len() as u64 + self.in_use.load(Ordering::SeqCst) + self.connecting.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
                     //Use In_use placeholder when create connection
-                    self.in_use.fetch_add(1, Ordering::SeqCst);
-                    defer!(||{
-                        self.in_use.fetch_sub(1, Ordering::SeqCst);
+                    self.connecting.fetch_add(1, Ordering::SeqCst);
+                    defer!(|| {
+                        self.connecting.fetch_sub(1, Ordering::SeqCst);
                     });
                     //create connection,this can limit max idle,current now max idle = max_open
                     let conn = self.manager.connect().await?;
@@ -108,13 +111,11 @@ impl<M: Manager> Pool<M> {
                     }
                     Err(_e) => {
                         drop(conn);
-                        if false {
-                            return Err(_e);
-                        }
                         continue;
                     }
                 }
-            }
+            };
+            v
         };
         let conn = {
             if d.is_none() {
@@ -125,10 +126,7 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        Ok(ConnectionBox::new(
-            conn,
-            self.clone(),
-        ))
+        Ok(ConnectionBox::new(conn, self.clone()))
     }
 
     pub fn state(&self) -> State {
@@ -138,6 +136,7 @@ impl<M: Manager> Pool<M> {
             in_use: self.in_use.load(Ordering::Relaxed),
             idle: self.idle_send.len() as u64,
             waits: self.waits.load(Ordering::Relaxed),
+            connecting: self.connecting.load(Ordering::Relaxed),
         }
     }
 
@@ -184,10 +183,7 @@ impl<M: Manager> DerefMut for ConnectionBox<M> {
 }
 
 impl<M: Manager> ConnectionBox<M> {
-    pub fn new(
-        conn: M::Connection,
-        pool: Pool<M>,
-    ) -> ConnectionBox<M> {
+    pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionBox<M> {
         pool.in_use.fetch_add(1, Ordering::SeqCst);
         Self {
             inner: Some(conn),
@@ -201,7 +197,8 @@ impl<M: Manager> Drop for ConnectionBox<M> {
         self.pool.in_use.fetch_sub(1, Ordering::SeqCst);
         if let Some(v) = self.inner.take() {
             let max_open = self.pool.max_open.load(Ordering::SeqCst);
-            if self.pool.idle_send.len() as u64 + self.pool.in_use.load(Ordering::SeqCst) < max_open {
+            if self.pool.idle_send.len() as u64 + self.pool.in_use.load(Ordering::SeqCst) < max_open
+            {
                 _ = self.pool.idle_send.send(v);
             }
         }
@@ -212,7 +209,7 @@ impl<M: Manager> Drop for ConnectionBox<M> {
 pub struct State {
     /// max open limit
     pub max_open: u64,
-    ///connections = in_use number + idle number
+    /// connections = in_use number + idle number + connecting number
     pub connections: u64,
     /// user use connection number
     pub in_use: u64,
@@ -220,14 +217,16 @@ pub struct State {
     pub idle: u64,
     /// wait get connections number
     pub waits: u64,
+    /// connecting connections
+    pub connecting: u64,
 }
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, waits: {} }}",
-            self.max_open, self.connections, self.in_use, self.idle, self.waits
+            "{{ max_open: {}, connections: {}, in_use: {}, idle: {}, connecting: {}, waits: {} }}",
+            self.max_open, self.connections, self.in_use, self.idle, self.connecting, self.waits
         )
     }
 }
