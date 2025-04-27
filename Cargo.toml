@@ -1,7 +1,7 @@
 workspace = { members = ["example"] }
 [package]
 name = "fast_pool"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 description = "The Fast Pool based on channel"
 readme = "README.md"
