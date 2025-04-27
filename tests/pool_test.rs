@@ -494,8 +494,7 @@ async fn test_concurrent_create_connection_less_for_max_open() {
     }
     for _ in 0..5{
         let state = p.state();
-        println!("max_open: {}, connections: {}, in_use: {}, idle: {}, waits: {}",
-                 state.max_open, state.connections, state.in_use, state.idle, state.waits);
+        println!("{}", state);
         assert_eq!(state.connections <= state.max_open, true);
         assert_eq!(state.in_use <= state.max_open, true);
         assert_eq!(state.idle <= state.max_open, true);
