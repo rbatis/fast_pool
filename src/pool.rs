@@ -22,11 +22,8 @@ pub struct Pool<M: Manager> {
 
 impl<M: Manager> Debug for Pool<M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Pool")
-            // .field("manager", &self.manager)
-            .field("max_open", &self.max_open)
-            .field("in_use", &self.in_use)
-            .finish()
+        let state = self.state();
+        Debug::fmt(&state, f)
     }
 }
 
