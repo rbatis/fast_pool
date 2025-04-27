@@ -1,11 +1,11 @@
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
-use flume::{Receiver, Sender};
 use crate::guard::ConnectionGuard;
-use crate::Manager;
 use crate::state::State;
+use crate::Manager;
+use flume::{Receiver, Sender};
+use std::fmt::{Debug, Formatter};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -14,10 +14,10 @@ pub struct Pool<M: Manager> {
     idle_recv: Arc<Receiver<M::Connection>>,
     max_open: Arc<AtomicU64>,
     pub(crate) in_use: Arc<AtomicU64>,
-    waits: Arc<AtomicU64>,
-    connecting: Arc<AtomicU64>,
-    checking: Arc<AtomicU64>,
-    connections: Arc<AtomicU64>,
+    pub(crate) waits: Arc<AtomicU64>,
+    pub(crate) connecting: Arc<AtomicU64>,
+    pub(crate) checking: Arc<AtomicU64>,
+    pub(crate) connections: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -73,8 +73,9 @@ impl<M: Manager> Pool<M> {
             self.waits.fetch_sub(1, Ordering::SeqCst);
         });
         let f = async {
-            let v: Result<M::Connection, M::Error> = loop {
-                let connections = self.connections.load(Ordering::SeqCst)+self.connecting.load(Ordering::SeqCst);
+            let v: Result<ConnectionGuard<M>, M::Error> = loop {
+                let connections = self.connections.load(Ordering::SeqCst)
+                    + self.connecting.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
                     //Use In_use placeholder when create connection
                     self.connecting.fetch_add(1, Ordering::SeqCst);
@@ -83,29 +84,30 @@ impl<M: Manager> Pool<M> {
                     });
                     //create connection,this can limit max idle,current now max idle = max_open
                     let conn = self.manager.connect().await?;
-                    self
-                        .idle_send
+                    self.idle_send
                         .send(conn)
                         .map_err(|e| M::Error::from(&e.to_string()))?;
                     self.connections.fetch_add(1, Ordering::SeqCst);
                 }
-                let mut conn = self
+                let conn = self
                     .idle_recv
                     .recv_async()
                     .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
+                let mut guard = ConnectionGuard::new(conn, self.clone());
+                guard.set_checked(false);
                 //check connection
                 self.checking.fetch_add(1, Ordering::SeqCst);
                 defer!(|| {
                     self.checking.fetch_sub(1, Ordering::SeqCst);
                 });
-                match self.manager.check(&mut conn).await {
+                match self.manager.check(&mut guard).await {
                     Ok(_) => {
-                        break Ok(conn);
+                        guard.set_checked(true);
+                        break Ok(guard);
                     }
                     Err(_e) => {
-                        drop(conn);
-                        self.connections.fetch_sub(1, Ordering::SeqCst);
+                        drop(guard);
                         continue;
                     }
                 }
@@ -121,7 +123,7 @@ impl<M: Manager> Pool<M> {
                     .map_err(|_e| M::Error::from("get_timeout"))??
             }
         };
-        Ok(ConnectionGuard::new(conn, self.clone()))
+        Ok(conn)
     }
 
     pub fn state(&self) -> State {
@@ -158,7 +160,9 @@ impl<M: Manager> Pool<M> {
         if self.idle_send.len() < self.max_open.load(Ordering::SeqCst) as usize {
             _ = self.idle_send.send(arg);
         } else {
-            self.connections.fetch_sub(1, Ordering::SeqCst);
+            if self.connections.load(Ordering::SeqCst) > 0 {
+                self.connections.fetch_sub(1, Ordering::SeqCst);
+            }
         }
     }
 }

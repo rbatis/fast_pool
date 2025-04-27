@@ -1,12 +1,13 @@
+use crate::{Manager, Pool};
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::Ordering;
-use crate::{Manager, Pool};
 
 /// ConnectionGuard is a wrapper for Connection
 pub struct ConnectionGuard<M: Manager> {
     pub inner: Option<M::Connection>,
     pool: Pool<M>,
+    checked: bool,
 }
 
 impl<M: Manager> ConnectionGuard<M> {
@@ -15,7 +16,12 @@ impl<M: Manager> ConnectionGuard<M> {
         Self {
             inner: Some(conn),
             pool,
+            checked: false,
         }
+    }
+
+    pub fn set_checked(&mut self, checked: bool) {
+        self.checked = checked;
     }
 }
 
@@ -43,9 +49,14 @@ impl<M: Manager> DerefMut for ConnectionGuard<M> {
 
 impl<M: Manager> Drop for ConnectionGuard<M> {
     fn drop(&mut self) {
-        if let Some(v) = self.inner.take() {
-            _ = self.pool.recycle(v);
+        if self.checked == false {
+            if self.pool.connections.load(Ordering::SeqCst) > 0 {
+                self.pool.connections.fetch_sub(1, Ordering::SeqCst);
+            }
+        }else{
+            if let Some(v) = self.inner.take() {
+                _ = self.pool.recycle(v);
+            }
         }
     }
 }
-
