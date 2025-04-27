@@ -543,3 +543,22 @@ async fn test_change_max_open2() {
     println!("{}",p.state());
     println!("len {}",p.idle_send.len());
 }
+
+#[tokio::test]
+async fn test_tokio_cancel() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(2);
+    let p1 = p.clone();
+    let task = tokio::spawn(async move {
+        let c1 = p1.get().await.unwrap();
+        let c2 = p1.get().await.unwrap();
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        drop(c1);
+        drop(c2);
+    });
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    task.abort();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    println!("{}", p.state());
+    assert_eq!(p.state().in_use, 0);
+}
