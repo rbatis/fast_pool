@@ -12,7 +12,6 @@ pub struct ConnectionGuard<M: Manager> {
 
 impl<M: Manager> ConnectionGuard<M> {
     pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionGuard<M> {
-        pool.in_use.fetch_add(1, Ordering::SeqCst);
         Self {
             inner: Some(conn),
             pool,
@@ -22,6 +21,9 @@ impl<M: Manager> ConnectionGuard<M> {
 
     pub fn set_checked(&mut self, checked: bool) {
         self.checked = checked;
+        if checked {
+            self.pool.in_use.fetch_add(1, Ordering::SeqCst);
+        }
     }
 }
 
@@ -53,7 +55,7 @@ impl<M: Manager> Drop for ConnectionGuard<M> {
             if self.pool.connections.load(Ordering::SeqCst) > 0 {
                 self.pool.connections.fetch_sub(1, Ordering::SeqCst);
             }
-        }else{
+        } else {
             if let Some(v) = self.inner.take() {
                 _ = self.pool.recycle(v);
             }
