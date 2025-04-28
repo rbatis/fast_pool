@@ -105,9 +105,12 @@ impl<M: Manager> Pool<M> {
                 defer!(|| {
                     self.checking.fetch_sub(1, Ordering::SeqCst);
                 });
-                let check_result= tokio::time::timeout(Duration::from_secs(self.timeout_check.load(Ordering::Relaxed)), self.manager.check(&mut guard))
-                    .await
-                    .map_err(|e| M::Error::from(&format!("check_timeout={}",e)))?;
+                let check_result = tokio::time::timeout(
+                    Duration::from_secs(self.timeout_check.load(Ordering::Relaxed)),
+                    self.manager.check(&mut guard),
+                )
+                .await
+                .map_err(|e| M::Error::from(&format!("check_timeout={}", e)))?;
                 match check_result {
                     Ok(_) => {
                         guard.set_checked(true);
@@ -162,6 +165,10 @@ impl<M: Manager> Pool<M> {
         }
     }
 
+    pub fn get_max_open(&self) -> u64 {
+        self.max_open.load(Ordering::SeqCst)
+    }
+
     pub fn recycle(&self, arg: M::Connection) {
         self.in_use.fetch_sub(1, Ordering::SeqCst);
         if self.idle_send.len() < self.max_open.load(Ordering::SeqCst) as usize {
@@ -175,6 +182,11 @@ impl<M: Manager> Pool<M> {
 
     /// Set the timeout for checking connections in the pool.
     pub fn set_timeout_check(&self, timeout_sec: u64) {
-        self.timeout_check.store(timeout_sec, Ordering::Relaxed);
+        self.timeout_check.store(timeout_sec, Ordering::SeqCst);
+    }
+
+    /// Set the timeout for checking connections in the pool.
+    pub fn get_timeout_check(&self) -> u64 {
+        self.timeout_check.load(Ordering::Relaxed)
     }
 }
