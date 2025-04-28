@@ -623,7 +623,7 @@ async fn test_tokio_panic() {
 async fn test_timeout_zero() {
     let p = Pool::new(TestManager {});
     p.set_max_open(1);
-    p.set_timeout_check(Duration::from_secs(0));
+    p.set_timeout_check(0);
     let v = p.get().await.unwrap();
     println!("{:?}",v.inner);
 }

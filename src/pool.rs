@@ -174,7 +174,7 @@ impl<M: Manager> Pool<M> {
     }
 
     /// Set the timeout for checking connections in the pool.
-    pub fn set_timeout_check(&self, timeout: Duration) {
-        self.timeout_check.store(timeout.as_secs(), Ordering::Relaxed);
+    pub fn set_timeout_check(&self, timeout_sec: u64) {
+        self.timeout_check.store(timeout_sec, Ordering::Relaxed);
     }
 }
