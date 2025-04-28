@@ -9,15 +9,16 @@ use std::time::Duration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
-    manager: Arc<M>,
+    pub manager: Arc<M>,
     pub idle_send: Arc<Sender<M::Connection>>,
-    idle_recv: Arc<Receiver<M::Connection>>,
-    max_open: Arc<AtomicU64>,
+    pub idle_recv: Arc<Receiver<M::Connection>>,
+    pub max_open: Arc<AtomicU64>,
     pub(crate) in_use: Arc<AtomicU64>,
     pub(crate) waits: Arc<AtomicU64>,
     pub(crate) connecting: Arc<AtomicU64>,
     pub(crate) checking: Arc<AtomicU64>,
     pub(crate) connections: Arc<AtomicU64>,
+    pub timeout_check_sec: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -39,6 +40,7 @@ impl<M: Manager> Clone for Pool<M> {
             connecting: self.connecting.clone(),
             checking: self.checking.clone(),
             connections: self.connections.clone(),
+            timeout_check_sec: self.timeout_check_sec.clone(),
         }
     }
 }
@@ -60,6 +62,7 @@ impl<M: Manager> Pool<M> {
             connecting: Arc::new(AtomicU64::new(0)),
             checking: Arc::new(AtomicU64::new(0)),
             connections: Arc::new(AtomicU64::new(0)),
+            timeout_check_sec: Arc::new(AtomicU64::new(30)),
         }
     }
 
@@ -101,7 +104,10 @@ impl<M: Manager> Pool<M> {
                 defer!(|| {
                     self.checking.fetch_sub(1, Ordering::SeqCst);
                 });
-                match self.manager.check(&mut guard).await {
+                let check_result= tokio::time::timeout(Duration::from_secs(self.timeout_check_sec.load(Ordering::Relaxed)), self.manager.check(&mut guard))
+                    .await
+                    .map_err(|e| M::Error::from(&format!("check_timeout={}",e)))?;
+                match check_result {
                     Ok(_) => {
                         guard.set_checked(true);
                         break Ok(guard);
@@ -164,5 +170,10 @@ impl<M: Manager> Pool<M> {
                 self.connections.fetch_sub(1, Ordering::SeqCst);
             }
         }
+    }
+
+    /// Set the timeout for checking connections in the pool.
+    pub fn set_timeout_check(&self, timeout: Duration) {
+        self.timeout_check_sec.store(timeout.as_secs(), Ordering::Relaxed);
     }
 }

@@ -568,14 +568,21 @@ async fn test_tokio_panic() {
     let p = Pool::new(TestManager {});
     p.set_max_open(2);
     let p1 = p.clone();
-    let task = tokio::spawn(async move {
-        let c1 = p1.get().await.unwrap();
-        let c2 = p1.get().await.unwrap();
+    let _task = tokio::spawn(async move {
+        let _c1 = p1.get().await.unwrap();
+        let _c2 = p1.get().await.unwrap();
         panic!("test_tokio_panic");
-        drop(c1);
-        drop(c2);
     });
     tokio::time::sleep(Duration::from_secs(3)).await;
     println!("{}", p.state());
     assert_eq!(p.state().in_use, 0);
+}
+
+#[tokio::test]
+async fn test_timeout_zero() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(1);
+    p.set_timeout_check(Duration::from_secs(0));
+    let v = p.get().await.unwrap();
+    println!("{:?}",v.inner);
 }
