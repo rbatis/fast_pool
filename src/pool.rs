@@ -18,7 +18,8 @@ pub struct Pool<M: Manager> {
     pub(crate) connecting: Arc<AtomicU64>,
     pub(crate) checking: Arc<AtomicU64>,
     pub(crate) connections: Arc<AtomicU64>,
-    pub timeout_check_sec: Arc<AtomicU64>,
+    //timeout check connection default 10s
+    pub timeout_check: Arc<AtomicU64>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -40,7 +41,7 @@ impl<M: Manager> Clone for Pool<M> {
             connecting: self.connecting.clone(),
             checking: self.checking.clone(),
             connections: self.connections.clone(),
-            timeout_check_sec: self.timeout_check_sec.clone(),
+            timeout_check: self.timeout_check.clone(),
         }
     }
 }
@@ -62,7 +63,7 @@ impl<M: Manager> Pool<M> {
             connecting: Arc::new(AtomicU64::new(0)),
             checking: Arc::new(AtomicU64::new(0)),
             connections: Arc::new(AtomicU64::new(0)),
-            timeout_check_sec: Arc::new(AtomicU64::new(30)),
+            timeout_check: Arc::new(AtomicU64::new(10)),
         }
     }
 
@@ -104,7 +105,7 @@ impl<M: Manager> Pool<M> {
                 defer!(|| {
                     self.checking.fetch_sub(1, Ordering::SeqCst);
                 });
-                let check_result= tokio::time::timeout(Duration::from_secs(self.timeout_check_sec.load(Ordering::Relaxed)), self.manager.check(&mut guard))
+                let check_result= tokio::time::timeout(Duration::from_secs(self.timeout_check.load(Ordering::Relaxed)), self.manager.check(&mut guard))
                     .await
                     .map_err(|e| M::Error::from(&format!("check_timeout={}",e)))?;
                 match check_result {
@@ -174,6 +175,6 @@ impl<M: Manager> Pool<M> {
 
     /// Set the timeout for checking connections in the pool.
     pub fn set_timeout_check(&self, timeout: Duration) {
-        self.timeout_check_sec.store(timeout.as_secs(), Ordering::Relaxed);
+        self.timeout_check.store(timeout.as_secs(), Ordering::Relaxed);
     }
 }
