@@ -1,5 +1,6 @@
+use std::fmt::Display;
 use fast_pool::{Manager, Pool};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,17 +8,57 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[derive(Debug)]
 pub struct TestManager {}
 
+
+#[derive(Debug,Clone)]
+pub struct TestConnection{
+    pub inner: String,
+}
+
+impl TestConnection {
+    pub fn new()->TestConnection{
+        println!("new Connection");
+        TestConnection{
+            inner: "".to_string(),
+        }
+    }
+}
+
+impl Display for TestConnection{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+impl Deref for TestConnection {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for TestConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl Drop for TestConnection {
+    fn drop(&mut self) {
+        println!("drop Connection");
+    }
+}
+
+
 impl Manager for TestManager {
-    type Connection = String;
+    type Connection = TestConnection;
     type Error = String;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        println!("new Connection");
-        Ok(String::new())
+        Ok(TestConnection::new())
     }
 
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        if conn != "" {
+        if conn.inner != "" {
             return Err(Self::Error::from(&conn.to_string()));
         }
         Ok(())
@@ -56,7 +97,7 @@ async fn test_pool_get2() {
     p.set_max_open(10);
     for i in 0..3 {
         let v = p.get().await.unwrap();
-        println!("{},{}", i, v.deref());
+        println!("{},{}", i, v.deref().inner.as_str());
     }
     assert_eq!(p.state().idle, 3);
 }
@@ -82,10 +123,10 @@ async fn test_pool_check() {
     let p = Pool::new(TestManager {});
     p.set_max_open(10);
     let mut v = p.get().await.unwrap();
-    *v.inner.as_mut().unwrap() = "error".to_string();
+    *v.inner.as_mut().unwrap() = TestConnection{inner:"error".to_string()};
     for _i in 0..10 {
         let v = p.get().await.unwrap();
-        assert_eq!(v.deref() == "error", false);
+        assert_eq!(v.deref().inner == "error", false);
     }
 }
 
@@ -158,12 +199,12 @@ async fn test_invalid_connection() {
 
     let mut conn = p.get().await.unwrap();
     //conn timeout
-    *conn.inner.as_mut().unwrap() = "error".to_string();
+    *conn.inner.as_mut().unwrap() = TestConnection{inner: "error".to_string()};
     drop(conn);
     println!("pool state: {}", p.state());
     // Attempt to get a new connection, should not be the invalid one
     let new_conn = p.get().await.unwrap();
-    assert_ne!(new_conn.deref(), &"error".to_string());
+    assert_ne!(new_conn.deref().inner, "error".to_string());
 }
 
 #[tokio::test]
@@ -182,7 +223,7 @@ async fn test_connection_lifetime() {
 
     // Acquire a new connection
     let new_conn = p.get().await.unwrap();
-    assert_ne!(new_conn.deref(), &"error".to_string());
+    assert_ne!(new_conn.deref().inner, "error".to_string());
 }
 
 #[tokio::test]
@@ -585,4 +626,14 @@ async fn test_timeout_zero() {
     p.set_timeout_check(Duration::from_secs(0));
     let v = p.get().await.unwrap();
     println!("{:?}",v.inner);
+}
+
+#[tokio::test]
+async fn test_pool_drop() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(1);
+    let v = p.get().await.unwrap();
+    println!("{:?}",v.inner);
+    drop(v);
+    drop(p);
 }
