@@ -53,13 +53,12 @@ impl<M: Manager> Pool<M> {
     where
         M::Connection: Unpin,
     {
-        let default_max = num_cpus::get() as u64;
         let (s, r) = flume::unbounded();
         Self {
             manager: Arc::new(m),
             idle_send: Arc::new(s),
             idle_recv: Arc::new(r),
-            max_open: Arc::new(AtomicU64::new(default_max)),
+            max_open: Arc::new(AtomicU64::new(32)),
             in_use: Arc::new(AtomicU64::new(0)),
             waits: Arc::new(AtomicU64::new(0)),
             connecting: Arc::new(AtomicU64::new(0)),
