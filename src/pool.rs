@@ -126,12 +126,13 @@ impl<M: Manager> Pool<M> {
             v
         };
         let conn = {
-            if d.is_none() {
-                f.await?
-            } else {
-                tokio::time::timeout(d.unwrap(), f)
-                    .await
-                    .map_err(|_e| M::Error::from("get_timeout"))??
+            match d {
+                None => {f.await?}
+                Some(duration) => {
+                    tokio::time::timeout(duration, f)
+                        .await
+                        .map_err(|_e| M::Error::from("get_timeout"))??
+                }
             }
         };
         Ok(conn)
