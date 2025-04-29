@@ -10,7 +10,7 @@ a fast async pool based on channel
 * support atomic max_open(Resize freely)
 * based on [flume](https://crates.io/crates/flume)
 
-### way fast_pool?
+### why fast_pool?
 
 * fast get() method performance
 ```log
