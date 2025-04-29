@@ -23,7 +23,7 @@ impl QPS for std::time::Instant {
     fn qps(&self, total: u64) {
         let time = self.elapsed();
         println!(
-            "use QPS: {} QPS/s",
+            "QPS: {} QPS/s",
             (total as u128 * 1000000000 as u128 / time.as_nanos() as u128)
         );
     }
@@ -31,7 +31,7 @@ impl QPS for std::time::Instant {
     fn time(&self, total: u64) {
         let time = self.elapsed();
         println!(
-            "use Time: {:?} ,each:{} ns/op",
+            "Time: {:?} ,each:{} ns/op",
             &time,
             time.as_nanos() / (total as u128)
         );
@@ -69,15 +69,15 @@ where
     })
 }
 
-//cargo test --release --package fast_pool --bench raw_performance bench_pool --no-fail-fast --  --exact -Z unstable-options --show-output
+//cargo test --release --package fast_pool --bench performance bench_pool --no-fail-fast --  --exact -Z unstable-options --show-output
 //windows:
 //---- bench_pool stdout ----
-//use Time: 4.0313ms ,each:40 ns/op
-//use QPS: 24749412 QPS/s
+//Time: 14.0994ms ,each:140 ns/op
+//QPS: 7086167 QPS/s
 //macos:
 //---- bench_pool stdout ----
-// use Time: 6.373708ms ,each:63 ns/op
-// use QPS: 15683710 QPS/s
+//Time: 6.373708ms ,each:63 ns/op
+//QPS: 15683710 QPS/s
 #[test]
 fn bench_pool() {
     use async_trait::async_trait;
