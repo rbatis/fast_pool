@@ -14,6 +14,7 @@ pub struct Pool<M: Manager> {
     pub manager: Arc<M>,
     pub idle_send: Arc<Sender<M::Connection>>,
     pub idle_recv: Arc<Receiver<M::Connection>>,
+    /// max open connection default 32
     pub max_open: Arc<AtomicU64>,
     pub(crate) in_use: Arc<AtomicU64>,
     pub(crate) waits: Arc<AtomicU64>,
