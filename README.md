@@ -18,11 +18,10 @@ a fast async pool based on channel
 //---- bench_pool stdout ----
 //Time: 14.0994ms ,each:140 ns/op
 //QPS: 7086167 QPS/s
-//macos:
-//---- bench_pool stdout ----
-//Time: 6.373708ms ,each:63 ns/op
-//QPS: 15683710 QPS/s
 ```
+* Implement using only channels
+* no additional threads
+* Support asynchronous/tokio
 
 
 ### how to use this?
