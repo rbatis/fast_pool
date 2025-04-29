@@ -6,8 +6,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use dark_std::defer;
-use dark_std::sync::AtomicDuration;
+use crate::duration::AtomicDuration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
