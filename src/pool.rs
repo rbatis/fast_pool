@@ -6,6 +6,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use dark_std::sync::AtomicDuration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -19,7 +20,7 @@ pub struct Pool<M: Manager> {
     pub(crate) checking: Arc<AtomicU64>,
     pub(crate) connections: Arc<AtomicU64>,
     //timeout check connection default 10s
-    pub timeout_check: Arc<AtomicU64>,
+    pub timeout_check: Arc<AtomicDuration>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -63,7 +64,7 @@ impl<M: Manager> Pool<M> {
             connecting: Arc::new(AtomicU64::new(0)),
             checking: Arc::new(AtomicU64::new(0)),
             connections: Arc::new(AtomicU64::new(0)),
-            timeout_check: Arc::new(AtomicU64::new(10)),
+            timeout_check: Arc::new(AtomicDuration::new(Some(Duration::from_secs(10)))),
         }
     }
 
@@ -106,7 +107,7 @@ impl<M: Manager> Pool<M> {
                     self.checking.fetch_sub(1, Ordering::SeqCst);
                 });
                 let check_result = tokio::time::timeout(
-                    Duration::from_secs(self.timeout_check.load(Ordering::Relaxed)),
+                    self.timeout_check.get().unwrap_or_default(),
                     self.manager.check(&mut guard),
                 )
                 .await
@@ -181,12 +182,12 @@ impl<M: Manager> Pool<M> {
     }
 
     /// Set the timeout for checking connections in the pool.
-    pub fn set_timeout_check(&self, timeout_sec: u64) {
-        self.timeout_check.store(timeout_sec, Ordering::SeqCst);
+    pub fn set_timeout_check(&self, duration: Option<Duration>) {
+        self.timeout_check.store(duration);
     }
 
     /// Set the timeout for checking connections in the pool.
-    pub fn get_timeout_check(&self) -> u64 {
-        self.timeout_check.load(Ordering::Relaxed)
+    pub fn get_timeout_check(&self) -> Option<Duration> {
+        self.timeout_check.get()
     }
 }
