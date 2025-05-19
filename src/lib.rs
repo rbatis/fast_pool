@@ -6,6 +6,7 @@ mod duration;
 pub mod state;
 pub mod guard;
 pub mod pool;
+pub mod plugin;
 
 /// Manager create Connection and check Connection
 pub trait Manager {
