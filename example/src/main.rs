@@ -23,14 +23,15 @@ impl Manager for TestManager {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let p = Pool::new(TestManager {});
     println!("state = {}", p.state());
     p.set_max_open(10);
     println!("state = {}", p.state());
 
-    let mut conn = p.get().await.unwrap();
+    let mut conn = p.get().await?;
     println!("conn = {}", conn.deref_mut());
-    let mut conn = p.get_timeout(Some(Duration::from_secs(1))).await.unwrap();
+    let mut conn = p.get_timeout(Some(Duration::from_secs(1))).await?;
     println!("conn = {}", conn.deref_mut());
+    Ok(())
 }
