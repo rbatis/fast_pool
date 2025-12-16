@@ -7,6 +7,7 @@ pub mod state;
 pub mod guard;
 pub mod pool;
 pub mod plugin;
+pub mod time_connection;
 
 /// Manager create Connection and check Connection
 pub trait Manager {
