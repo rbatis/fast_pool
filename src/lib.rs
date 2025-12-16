@@ -2,7 +2,7 @@
 
 #[macro_use]
 mod defer;
-mod duration;
+pub mod duration;
 pub mod state;
 pub mod guard;
 pub mod pool;
