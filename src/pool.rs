@@ -24,8 +24,6 @@ pub struct Pool<M: Manager> {
     pub(crate) connections: Arc<AtomicU64>,
     //timeout check connection default 10s
     pub timeout_check: Arc<AtomicDuration>,
-    //connection max lifetime, None means no limit
-    pub max_lifetime: Arc<AtomicDuration>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -49,7 +47,6 @@ impl<M: Manager> Clone for Pool<M> {
             checking: self.checking.clone(),
             connections: self.connections.clone(),
             timeout_check: self.timeout_check.clone(),
-            max_lifetime: self.max_lifetime.clone(),
         }
     }
 }
@@ -73,7 +70,6 @@ impl<M: Manager> Pool<M> {
             checking: Arc::new(AtomicU64::new(0)),
             connections: Arc::new(AtomicU64::new(0)),
             timeout_check: Arc::new(AtomicDuration::new(Some(Duration::from_secs(10)))),
-            max_lifetime: Arc::new(AtomicDuration::new(None)),
         }
     }
 
@@ -226,21 +222,4 @@ impl<M: Manager> Pool<M> {
         self.timeout_check.get()
     }
 
-    /// 设置连接的最大生命周期
-    pub fn set_conn_max_lifetime(&self, duration: Option<Duration>) {
-        self.max_lifetime.store(duration);
     }
-
-    /// 获取连接的最大生命周期设置
-    pub fn get_conn_max_lifetime(&self) -> Option<Duration> {
-        self.max_lifetime.get()
-    }
-
-    /// 检查是否需要时间戳功能（根据当前配置动态决定）
-    #[inline]
-    pub fn needs_timestamp(&self) -> bool {
-        // 如果设置了最大生命周期，需要时间戳
-        self.max_lifetime.get().is_some()
-        // 注意：max_idle_conns 不需要时间戳，只是连接数限制
-    }
-}

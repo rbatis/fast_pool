@@ -3,11 +3,13 @@ use crate::duration::AtomicDuration;
 use crate::Manager;
 
 /// `CheckDurationConnectionManager` is a manager wrapper that implements connection validation
-/// based on a specified idle duration.
+/// based on a specified idle duration or connection lifetime.
 ///
-/// This manager only performs actual connection validation after a specified duration has passed
-/// since the last check. This can significantly reduce the overhead of frequent validation
-/// for connections that are used repeatedly within short time intervals.
+/// This manager can operate in two modes:
+/// 1. **Check Interval Mode**: Only performs actual connection validation after a specified duration
+///    has passed since the last check. This reduces overhead for connections used repeatedly.
+/// 2. **Connection Lifetime Mode**: Tracks individual connection creation time and enforces
+///    maximum connection lifetime. Connections older than the specified duration are considered expired.
 ///
 /// # Example
 /// ```no_run
