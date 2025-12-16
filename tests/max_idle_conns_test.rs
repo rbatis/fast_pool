@@ -218,3 +218,85 @@ async fn test_max_idle_conns_edge_cases() {
     // 空闲连接数不应该超过 max_open
     assert!(pool.state().idle <= 5);
 }
+
+#[tokio::test]
+async fn test_max_open_zero_early_return() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    let original_max_open = pool.get_max_open();
+
+    // 尝试设置为 0，这应该导致早期返回 (pool.rs line 162-163)
+    pool.set_max_open(0);
+
+    // 验证值没有改变
+    assert_eq!(pool.get_max_open(), original_max_open);
+
+    // 设置正常值应该生效
+    pool.set_max_open(10);
+    assert_eq!(pool.get_max_open(), 10);
+}
+
+#[tokio::test]
+async fn test_set_max_open_force_cleanup_loop() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    // 创建多个连接并让它们变为空闲状态
+    let mut guards = vec![];
+    for _ in 0..5 {
+        guards.push(pool.get().await.unwrap());
+    }
+
+    // 释放所有连接，让它们进入空闲队列
+    for guard in guards {
+        drop(guard);
+    }
+
+    // 给一点时间让连接被回收
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    // 检查状态，确认有空闲连接
+    let state = pool.state();
+    assert!(state.idle > 0);
+
+    // 将 max_open 设置为非常小的值，强制触发清理循环 (pool.rs line 171)
+    pool.set_max_open(1);
+
+    // 验证设置生效
+    assert_eq!(pool.get_max_open(), 1);
+}
+
+#[tokio::test]
+async fn test_set_max_open_aggressive_cleanup() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    // 创建大量连接
+    let mut connections = vec![];
+    for _ in 0..20 {
+        connections.push(pool.get().await.unwrap());
+    }
+
+    // 同时获取 max_open 状态
+    let initial_max_open = pool.get_max_open();
+    assert_eq!(initial_max_open, 32); // 默认值
+
+    // 释放一半连接
+    for conn in connections.into_iter().take(10) {
+        drop(conn);
+    }
+
+    // 给连接回收一些时间
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 将 max_open 设置为需要清理很多连接的值
+    // 这会强制触发 loop 内的多轮清理 (pool.rs line 171)
+    pool.set_max_open(5);
+
+    // 验证设置生效
+    assert_eq!(pool.get_max_open(), 5);
+
+    // 验证 max_idle 也被相应调整
+    assert_eq!(pool.get_max_idle_conns(), 5);
+}

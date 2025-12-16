@@ -637,3 +637,46 @@ async fn test_pool_drop() {
     drop(v);
     drop(p);
 }
+
+#[tokio::test]
+async fn test_connection_check_success_path() {
+    #[derive(Debug, Default)]
+    struct CheckManager {
+        connection_count: std::sync::atomic::AtomicU64,
+    }
+
+    #[derive(Debug)]
+    struct CheckConnection {
+        id: u32,
+        valid: bool,
+    }
+
+    impl Manager for CheckManager {
+        type Connection = CheckConnection;
+        type Error = String;
+
+        async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+            self.connection_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(CheckConnection {
+                id: self.connection_count.load(std::sync::atomic::Ordering::SeqCst) as u32,
+                valid: true,
+            })
+        }
+
+        async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
+            // 模拟成功的检查，这会触发 Ok(_) => { 分支 (pool.rs line 123)
+            if conn.valid {
+                Ok(())
+            } else {
+                Err("Invalid connection".to_string())
+            }
+        }
+    }
+
+    let manager = CheckManager::default();
+    let pool = Pool::new(manager);
+
+    // 获取连接，这将通过成功的检查路径
+    let _guard = pool.get().await.unwrap();
+    // 当 guard 被创建时，它会通过连接检查，触发 pool.rs line 123 的 Ok 分支
+}
