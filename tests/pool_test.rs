@@ -647,7 +647,6 @@ async fn test_connection_check_success_path() {
 
     #[derive(Debug)]
     struct CheckConnection {
-        id: u32,
         valid: bool,
     }
 
@@ -658,7 +657,6 @@ async fn test_connection_check_success_path() {
         async fn connect(&self) -> Result<Self::Connection, Self::Error> {
             self.connection_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(CheckConnection {
-                id: self.connection_count.load(std::sync::atomic::Ordering::SeqCst) as u32,
                 valid: true,
             })
         }
