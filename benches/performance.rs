@@ -15,10 +15,10 @@ use std::time::Duration;
 use test::Bencher;
 use std::time::Instant;
 
-// cargo bench bench_pool
+// cargo bench bench
 // note: rt.block_on(async{}) cost 50ns/iter. you need result = bench_result - 50ns
 #[bench]
-fn bench_pool(b: &mut Bencher) {
+fn bench(b: &mut Bencher) {
     use async_trait::async_trait;
     use fast_pool::{Manager, Pool};
 

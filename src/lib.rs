@@ -10,7 +10,7 @@ pub mod state;
 
 /// Trait for connection management and validation
 pub trait Manager: std::any::Any + Send + Sync {
-    type Connection;
+    type Connection: Send;
 
     type Error: for<'a> From<&'a str>;
 

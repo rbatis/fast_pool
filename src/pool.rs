@@ -2,7 +2,7 @@ use crate::duration::AtomicDuration;
 use crate::guard::ConnectionGuard;
 use crate::state::State;
 use crate::Manager;
-use flume::{Receiver, Sender};
+use crossfire::mpmc::unbounded_async;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -11,8 +11,8 @@ use std::time::Duration;
 /// Connection pool with configurable manager and lifecycle management
 pub struct Pool<M: Manager> {
     pub manager: Arc<M>,
-    pub idle_send: Arc<Sender<M::Connection>>,
-    pub idle_recv: Arc<Receiver<M::Connection>>,
+    pub idle_send: Arc<crossfire::MTx<M::Connection>>,
+    pub idle_recv: Arc<crossfire::MAsyncRx<M::Connection>>,
     /// Maximum open connections (default: 32)
     pub max_open: Arc<AtomicU64>,
     /// Maximum idle connections (default: same as max_open)
@@ -55,9 +55,9 @@ impl<M: Manager> Pool<M> {
     /// Create new connection pool with default settings
     pub fn new(m: M) -> Self
     where
-        M::Connection: Unpin,
+        M::Connection: Unpin + Send,
     {
-        let (s, r) = flume::unbounded();
+        let (s, r) = unbounded_async();
         let max_open = 32;
         Self {
             manager: Arc::new(m),
@@ -104,7 +104,7 @@ impl<M: Manager> Pool<M> {
                 }
                 let conn = self
                     .idle_recv
-                    .recv_async()
+                    .recv()
                     .await
                     .map_err(|e| M::Error::from(&e.to_string()))?;
 
