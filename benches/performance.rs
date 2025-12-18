@@ -11,12 +11,87 @@ extern crate test;
 use futures_core::future::BoxFuture;
 use std::any::Any;
 use std::future::Future;
-use std::time::Duration;
 use test::Bencher;
-use std::time::Instant;
 
-// cargo bench bench
-// note: rt.block_on(async{}) cost 50ns/iter. you need result = bench_result - 50ns
+pub trait QPS {
+    fn print(&self, total: u64);
+    fn cost(&self);
+}
+
+impl QPS for std::time::Instant {
+    fn print(&self, total: u64) {
+        let time = self.elapsed();
+        println!(
+            "time: {:?} ,each:{} ns/op ,qps: {} QPS/s",
+            &time,
+            time.as_nanos() / (total as u128),
+            (total as u128 * 1000000000 as u128 / time.as_nanos() as u128)
+        );
+    }
+
+    fn cost(&self) {
+        let time = self.elapsed();
+        println!("cost:{:?}", time);
+    }
+}
+
+#[macro_export]
+macro_rules! rbench {
+    ($total:expr,$body:block) => {{
+        let now = std::time::Instant::now();
+        for _ in 0..$total {
+            $body;
+        }
+        now.print($total);
+    }};
+}
+
+pub fn block_on<T, R>(task: T) -> R
+where
+    T: Future<Output = R> + Send + 'static,
+    T::Output: Send + 'static,
+{
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio block_on fail")
+            .block_on(task)
+    })
+}
+
+//cargo bench --package fast_pool --bench performance -- bench_pool --exact --nocapture 
+#[bench]
+fn bench_pool(b: &mut Bencher) {
+    use async_trait::async_trait;
+    use fast_pool::{Manager, Pool};
+
+    pub struct TestManager {}
+
+    impl Manager for TestManager {
+        type Connection = i32;
+        type Error = String;
+
+        async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+            Ok(0)
+        }
+
+        async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+    let f = async {
+        let p = Pool::new(TestManager {});
+        rbench!(100000, {
+            let v = p.get().await.unwrap();
+        });
+    };
+    block_on(f);
+}
+
+
+// cargo bench --package fast_pool --bench performance -- bench --exact --nocapture 
+// note: rt.block_on(async{}) cost 63ns/iter. you need result = bench_result - 50ns
 #[bench]
 fn bench(b: &mut Bencher) {
     use async_trait::async_trait;

@@ -15,11 +15,11 @@ a fast async pool based on channel
 * fast get() method performance
 ```log
 //---- bench_pool windows ----
-//Time: 14.0994ms ,each:140 ns/op
+//Time: 14.0994ms ,each:130 ns/op
 //QPS: 7086167 QPS/s
 //---- bench_pool linux ----
-// Time: 12.042875ms ,each:120 ns/op
-// QPS: 8296001 QPS/s
+//Time: 11.437625ms ,each:114 ns/op
+//QPS: 8736453 QPS/s
 ```
 * Implement using only channels
 * no additional threads
