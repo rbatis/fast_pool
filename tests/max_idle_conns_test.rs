@@ -300,3 +300,101 @@ async fn test_set_max_open_aggressive_cleanup() {
     // 验证 max_idle 也被相应调整
     assert_eq!(pool.get_max_idle_conns(), 5);
 }
+
+#[tokio::test]
+async fn test_set_max_idle_conns_zero_validation() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    let original_max_idle = pool.get_max_idle_conns();
+
+    // 测试 set_max_idle_conns 设置为 0
+    // 与 set_max_open 不同，set_max_idle_conns 没有对 0 值的早期返回验证
+    pool.set_max_idle_conns(0);
+
+    // 验证是否设置了 0 值（这暴露了缺少输入验证的问题）
+    assert_eq!(pool.get_max_idle_conns(), 0);
+
+    // 恢复正常值
+    pool.set_max_idle_conns(original_max_idle);
+    assert_eq!(pool.get_max_idle_conns(), original_max_idle);
+}
+
+#[tokio::test]
+async fn test_max_idle_exceeds_max_open_state_inconsistency() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    // 首先设置一个较小的 max_open
+    pool.set_max_open(5);
+    assert_eq!(pool.get_max_open(), 5);
+    assert_eq!(pool.get_max_idle_conns(), 5); // set_max_open 应该自动调整 max_idle
+
+    // 现在，通过 set_max_idle_conns 设置一个超过 max_open 的值
+    // 这暴露了状态不一致问题：max_idle > max_open
+    pool.set_max_idle_conns(10);
+
+    // 验证不一致状态：max_idle 确实可以超过 max_open
+    assert_eq!(pool.get_max_open(), 5);
+    assert_eq!(pool.get_max_idle_conns(), 10); // 这个值大于 max_open，是不一致的
+
+    // 测试这种不一致状态下的行为 - 使用较少的连接避免卡死
+    let mut connections = vec![];
+    for _ in 0..3 {
+        connections.push(pool.get().await.unwrap());
+    }
+
+    // 释放连接
+    drop(connections);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // 即使 max_idle 设置为 10，实际的空闲连接不应该超过 max_open (5)
+    let state = pool.state();
+    assert!(state.idle <= 3, "实际空闲连接数不应该超过创建的连接数");
+    assert!(state.connections <= 5, "总连接数不应该超过 max_open");
+}
+
+#[tokio::test]
+async fn test_set_max_idle_conns_cleanup_robustness() {
+    let manager = TestManager::new();
+    let pool = Pool::new(manager);
+
+    pool.set_max_open(10);
+    pool.set_max_idle_conns(5);
+
+    // 创建一些连接
+    let mut connections = vec![];
+    for _ in 0..3 {
+        connections.push(pool.get().await.unwrap());
+    }
+
+    // 释放连接让它们进入空闲队列
+    drop(connections);
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    let initial_state = pool.state();
+    println!("设置前的状态: {}", initial_state);
+
+    // 设置一个更小的值，触发清理逻辑
+    pool.set_max_idle_conns(1);
+
+    // 等待清理生效
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    let final_state = pool.state();
+    println!("设置后的状态: {}", final_state);
+
+    // 验证清理逻辑是否正确处理了 try_recv 失败的情况
+    // 当前实现没有检查 try_recv 的返回值，可能导致 connections 计数不准确
+    assert!(final_state.idle <= 1, "空闲连接数应该 <= 1");
+
+    // 验证 connections 计数是否准确
+    // idle + in_use 应该等于 connections
+    assert_eq!(
+        final_state.idle + final_state.in_use,
+        final_state.connections,
+        "connections 计数不准确：idle + in_use = {}, connections = {}",
+        final_state.idle + final_state.in_use,
+        final_state.connections
+    );
+}
