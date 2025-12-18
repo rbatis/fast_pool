@@ -1,65 +1,55 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use crate::duration::AtomicDuration;
+use std::time::{Duration, Instant};
 use crate::Manager;
 
-/// `CheckDurationManager` is a manager wrapper that implements connection validation
-/// based on a specified idle duration or connection lifetime.
+/// Connection manager that limits check frequency to reduce overhead.
 ///
-/// This manager can operate in two modes:
-/// 1. **Check Interval Mode**: Only performs actual connection validation after a specified duration
-///    has passed since the last check. This reduces overhead for connections used repeatedly.
-/// 2. **Connection Lifetime Mode**: Tracks individual connection creation time and enforces
-///    maximum connection lifetime. Connections older than the specified duration are considered expired.
+/// Wraps another manager and only performs actual connection validation
+/// after the specified duration has passed since the last check.
 ///
 /// # Example
 /// ```no_run
 /// use std::time::Duration;
 /// use fast_pool::{Manager, Pool};
 /// use fast_pool::plugin::CheckDurationManager;
-/// 
-/// // Assume we have some database manager that implements Manager trait
-/// struct MyDatabaseManager;
-/// 
-/// impl Manager for MyDatabaseManager {
+///
+/// struct MyManager;
+///
+/// impl Manager for MyManager {
 ///     type Connection = ();
 ///     type Error = String;
-///     
+///
 ///     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
 ///         Ok(())
 ///     }
-///     
+///
 ///     async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
 ///         Ok(())
 ///     }
 /// }
-/// 
-/// let base_manager = MyDatabaseManager;
-/// let duration_manager = CheckDurationManager::new(base_manager, Duration::from_secs(60));
-/// let pool = Pool::new(duration_manager);
+///
+/// let manager = CheckDurationManager::new(MyManager, Duration::from_secs(30));
+/// let pool = Pool::new(manager);
 /// ```
 pub struct CheckDurationManager<M: Manager> {
-    /// The underlying connection manager that handles the actual connection operations
+    /// The underlying connection manager
     pub manager: M,
-    /// Minimum duration between actual connection checks
+    /// Minimum time between actual connection checks
     pub duration: Duration,
-    /// Timestamp of the last actual check (stored as duration since UNIX epoch)
-    pub instant: AtomicDuration,
+    /// When the last check was performed
+    pub last_check: Instant,
 }
 
 impl<M: Manager> CheckDurationManager<M> {
-    /// Creates a new `CheckDurationManager` with the specified manager and check duration.
+    /// Creates a new `CheckDurationManager`.
     ///
     /// # Parameters
     /// - `manager`: The underlying connection manager
-    /// - `duration`: The minimum duration that must pass before performing an actual check
-    ///
-    /// # Returns
-    /// A new `CheckDurationManager` instance
+    /// - `duration`: Minimum time between actual connection checks
     pub fn new(manager: M, duration: Duration) -> Self {
         Self {
             manager,
             duration,
-            instant: AtomicDuration::new(Some(Duration::from_secs(0))),
+            last_check: Instant::now(),
         }
     }
 }
@@ -68,39 +58,19 @@ impl<M: Manager> Manager for CheckDurationManager<M> {
     type Connection = M::Connection;
     type Error = M::Error;
 
-    /// Creates a new connection by delegating to the underlying manager.
-    ///
-    /// This method simply forwards the connection request to the wrapped manager.
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         self.manager.connect().await
     }
 
-    /// Checks if a connection is still valid, but only performs actual validation
-    /// if the specified duration has passed since the last check.
+    /// Checks connection validity only if enough time has passed.
     ///
-    /// # Logic
-    /// 1. Get the current time (as duration since UNIX epoch)
-    /// 2. Get the timestamp of the last check
-    /// 3. If less than `duration` time has passed, assume the connection is valid
-    /// 4. Otherwise, perform an actual check using the underlying manager and update the timestamp
-    ///
-    /// # Parameters
-    /// - `conn`: The connection to check
-    ///
-    /// # Returns
-    /// - `Ok(())` if the connection is valid or if the duration hasn't passed
-    /// - The error from the underlying manager if the check fails
+    /// If less than `duration` time has elapsed since the last check,
+    /// assumes the connection is still valid and returns `Ok(())`.
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or(Duration::from_secs(0));
-        let last_check = self.instant.get().unwrap_or_default();
-        // Skip the actual check if not enough time has passed
-        if now.saturating_sub(last_check) < self.duration {
+        // Skip check if not enough time has passed
+        if self.last_check.elapsed() < self.duration {
             return Ok(());
         }
-        // Update the timestamp and perform the actual check
-        self.instant.store(Some(now));
         self.manager.check(conn).await
     }
 } 
