@@ -285,7 +285,7 @@ async fn test_conn_max_lifetime_concurrent() {
                         tokio::time::sleep(Duration::from_millis(20)).await;
                         drop(conn);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         expired.fetch_add(1, Ordering::SeqCst);
                         // println!("Task {}-{} connectionerror: {}", i, j, e);
                     }
@@ -348,13 +348,13 @@ async fn test_edge_cases() {
     let pool = Pool::new(lifetime_manager);
 
     let conn = pool.get().await.unwrap();
-    let conn_id = conn.id;
+    let _conn_id = conn.id;
     drop(conn);
 
     // wait
     tokio::time::sleep(Duration::from_millis(5)).await;
 
-    let new_conn = pool.get().await.unwrap();
+    let _new_conn = pool.get().await.unwrap();
 
     // testcheck interval
     let base_manager2 = TestManager::new(Some(Duration::from_millis(50)));
@@ -365,13 +365,13 @@ async fn test_edge_cases() {
     let pool2 = Pool::new(long_interval_manager);
 
     let conn2 = pool2.get().await.unwrap();
-    let conn2_id = conn2.id;
+    let _conn2_id = conn2.id;
     drop(conn2);
 
     // waitlifetimecheck interval
     tokio::time::sleep(Duration::from_millis(60)).await;
 
-    let new_conn2 = pool2.get().await.unwrap();
+    let _new_conn2 = pool2.get().await.unwrap();
 
     println!("✅ boundarycasetestpass");
 }

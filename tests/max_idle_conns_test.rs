@@ -373,7 +373,7 @@ async fn test_set_max_idle_conns_cleanup_robustness() {
     drop(connections);
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    let initial_state = pool.state();
+    let _initial_state = pool.state();
 
     // setvalue，cleanup
     pool.set_max_idle_conns(1);
