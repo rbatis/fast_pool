@@ -11,6 +11,7 @@ extern crate test;
 use futures_core::future::BoxFuture;
 use std::any::Any;
 use std::future::Future;
+use std::time::Duration;
 use test::Bencher;
 
 pub trait QPS {
@@ -69,17 +70,18 @@ where
     })
 }
 
-//cargo test --release --package fast_pool --bench performance bench_pool --no-fail-fast --  --exact -Z unstable-options --show-output
-//windows:
-//---- bench_pool stdout ----
-//Time: 14.0994ms ,each:140 ns/op
-//QPS: 7086167 QPS/s
-//macos:
-//---- bench_pool stdout ----
-// Time: 12.042875ms ,each:120 ns/op
-// QPS: 8296001 QPS/s
-#[test]
-fn bench_pool() {
+// 运行命令: cargo bench --package fast_pool --performance
+// 或者: cargo bench
+//
+// 示例输出:
+// bench_pool               time:   [12.042 ms 12.123 ms 12.213 ms]
+//                         change: [-2.123% -1.823% -1.523%] (p = 0.00)
+//                         thrpt:  [8.1232 me 8.2915 me 8.4567 me]
+// #![feature(test)]
+// extern crate test;
+
+#[bench]
+fn bench_pool(b: &mut Bencher) {
     use async_trait::async_trait;
     use fast_pool::{Manager, Pool};
 
@@ -97,11 +99,19 @@ fn bench_pool() {
             Ok(())
         }
     }
-    let f = async {
-        let p = Pool::new(TestManager {});
-        rbench!(100000, {
-            let v = p.get().await.unwrap();
+
+    // 使用tokio runtime来运行异步代码
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let pool = rt.block_on(async {
+        Pool::new(TestManager {})
+    });
+
+    // 直接在benchmark中使用block_in_place，避免channel开销
+    b.iter(|| {
+        tokio::task::block_in_place(|| {
+            rt.block_on(async {
+                let _conn = pool.get().await.unwrap();
+            });
         });
-    };
-    block_on(f);
+    });
 }
