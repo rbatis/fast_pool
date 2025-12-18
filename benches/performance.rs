@@ -76,8 +76,8 @@ where
 //QPS: 7086167 QPS/s
 //macos:
 //---- bench_pool stdout ----
-//Time: 6.373708ms ,each:63 ns/op
-//QPS: 15683710 QPS/s
+// Time: 12.042875ms ,each:120 ns/op
+// QPS: 8296001 QPS/s
 #[test]
 fn bench_pool() {
     use async_trait::async_trait;
