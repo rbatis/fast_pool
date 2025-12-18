@@ -13,7 +13,7 @@ impl TestConnection {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-        println!("创建新连接: {}", id);
+        // println!("Creating new connection: {}", id);
         Self { id }
     }
 }
@@ -50,15 +50,15 @@ async fn test_set_max_idle_conns_basic() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 设置最大连接数和最大空闲连接数
+    // setmaxconnectionandmaxidleconnection
     pool.set_max_open(10);
     pool.set_max_idle_conns(5);
 
-    // 获取 8 个连接
+    // get 8 connection
     let mut connections = Vec::new();
     for i in 0..8 {
         let conn = pool.get().await.unwrap();
-        println!("获取连接 {}: ID = {}", i + 1, conn.id);
+        println!("get connection {}: ID = {}", i + 1, conn.id);
         connections.push(conn);
     }
 
@@ -66,14 +66,13 @@ async fn test_set_max_idle_conns_basic() {
     assert_eq!(pool.state().in_use, 8);
     assert_eq!(pool.state().idle, 0);
 
-    // 释放所有连接
+    // releaseconnection
     drop(connections);
 
-    // 等待连接回到池中
+    // waitconnection
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 由于设置了最大空闲连接数为 5，应该只有 5 个连接保留在池中
-    println!("释放后状态: {}", pool.state());
+    // due tosetmaxidleconnectionas 5，should 5 connectionat/in
     assert!(pool.state().idle <= 5);
     assert!(pool.state().connections <= 5);
 }
@@ -86,7 +85,7 @@ async fn test_set_max_idle_conns_dynamic() {
     pool.set_max_open(10);
     pool.set_max_idle_conns(3);
 
-    // 创建 5 个连接
+    // create 5 connection
     let mut connections = Vec::new();
     for _ in 0..5 {
         connections.push(pool.get().await.unwrap());
@@ -94,21 +93,21 @@ async fn test_set_max_idle_conns_dynamic() {
     assert_eq!(pool.state().connections, 5);
     assert_eq!(pool.state().in_use, 5);
 
-    // 释放所有连接
+    // releaseconnection
     drop(connections);
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 应该只有 3 个空闲连接
+    // should 3 idleconnection
     assert!(pool.state().idle <= 3);
     assert!(pool.state().connections <= 3);
 
-    // 动态调整最大空闲连接数
+    // adjustmaxidleconnection
     pool.set_max_idle_conns(1);
 
-    // 等待调整生效
+    // waitadjust
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 应该只有 1 个空闲连接
+    // should 1 idleconnection
     assert!(pool.state().idle <= 1);
     assert!(pool.state().connections <= 1);
 }
@@ -124,7 +123,7 @@ async fn test_set_max_idle_conns_with_concurrent_access() {
     let mut handles = Vec::new();
     let success_count = Arc::new(AtomicU64::new(0));
 
-    // 并发获取和释放连接
+    // concurrentgetandreleaseconnection
     for i in 0..15 {
         let pool_clone = pool.clone();
         let success = success_count.clone();
@@ -136,12 +135,12 @@ async fn test_set_max_idle_conns_with_concurrent_access() {
                 {
                     Ok(conn) => {
                         success.fetch_add(1, Ordering::SeqCst);
-                        println!("Task {}-{} 获取连接: {}", i, j, conn.id);
+                        println!("Task {}-{} get connection: {}", i, j, conn.id);
                         tokio::time::sleep(Duration::from_millis(20)).await;
                         drop(conn);
                     }
                     Err(_) => {
-                        println!("Task {}-{} 获取连接超时", i, j);
+                        println!("Task {}-{} get connectiontimeout", i, j);
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -150,16 +149,15 @@ async fn test_set_max_idle_conns_with_concurrent_access() {
         handles.push(handle);
     }
 
-    // 等待所有任务完成
+    // waitcomplete
     for handle in handles {
         handle.await.unwrap();
     }
 
-    // 验证连接池状态
+    // verifyconnectionstate
     let state = pool.state();
-    println!("最终状态: {}", state);
 
-    // 验证空闲连接数不超过最大限制
+    // verifyidleconnectionmaxlimit
     assert!(state.idle <= 8);
     assert!(state.connections <= state.max_open);
 }
@@ -169,23 +167,23 @@ async fn test_get_max_idle_conns() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 默认情况下，max_idle 应该等于 max_open
+    // case，max_idle should max_open
     assert_eq!(pool.get_max_idle_conns(), 32);
     assert_eq!(pool.get_max_open(), 32);
 
-    // 设置不同的值
+    // setvalue
     pool.set_max_open(15);
     pool.set_max_idle_conns(7);
 
     assert_eq!(pool.get_max_open(), 15);
     assert_eq!(pool.get_max_idle_conns(), 7);
 
-    // 设置 max_open 为小于 max_idle 的值，应该自动调整 max_idle
+    // set max_open as max_idle value，shouldadjust max_idle
     pool.set_max_open(5);
 
-    // 检查 max_open 是否正确更新
+    // check max_open
     assert_eq!(pool.get_max_open(), 5);
-    // max_idle 应该被自动调整为不超过 max_open
+    // max_idle shouldbyadjustas max_open
     assert_eq!(pool.get_max_idle_conns(), 5);
 }
 
@@ -194,19 +192,19 @@ async fn test_max_idle_conns_edge_cases() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 测试设置为 0
+    // testsetas 0
     pool.set_max_idle_conns(0);
 
-    // 获取一个连接然后释放
+    // get connectionthenrelease
     let conn = pool.get().await.unwrap();
     drop(conn);
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 空闲连接数应该为 0
+    // idleconnectionshouldas 0
     assert_eq!(pool.state().idle, 0);
 
-    // 测试设置为很大的值
+    // testsetasvalue
     pool.set_max_idle_conns(1000);
     pool.set_max_open(5);
 
@@ -218,7 +216,7 @@ async fn test_max_idle_conns_edge_cases() {
     drop(connections);
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 空闲连接数不应该超过 max_open
+    // idleconnectionshould max_open
     assert!(pool.state().idle <= 5);
 }
 
@@ -229,13 +227,13 @@ async fn test_max_open_zero_early_return() {
 
     let original_max_open = pool.get_max_open();
 
-    // 尝试设置为 0，这应该导致早期返回 (pool.rs line 162-163)
+    // trysetas 0，thisshouldreturn (pool.rs line 162-163)
     pool.set_max_open(0);
 
-    // 验证值没有改变
+    // verifyvalue
     assert_eq!(pool.get_max_open(), original_max_open);
 
-    // 设置正常值应该生效
+    // setvalueshould
     pool.set_max_open(10);
     assert_eq!(pool.get_max_open(), 10);
 }
@@ -245,28 +243,28 @@ async fn test_set_max_open_force_cleanup_loop() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 创建多个连接并让它们变为空闲状态
+    // createconnectionletasidlestate
     let mut guards = vec![];
     for _ in 0..5 {
         guards.push(pool.get().await.unwrap());
     }
 
-    // 释放所有连接，让它们进入空闲队列
+    // releaseconnection，letidle
     for guard in guards {
         drop(guard);
     }
 
-    // 给一点时间让连接被回收
+    // giveletconnectionby
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    // 检查状态，确认有空闲连接
+    // checkstate，confirmidleconnection
     let state = pool.state();
     assert!(state.idle > 0);
 
-    // 将 max_open 设置为非常小的值，强制触发清理循环 (pool.rs line 171)
+    // will max_open setasvalue，cleanup (pool.rs line 171)
     pool.set_max_open(1);
 
-    // 验证设置生效
+    // verifyset
     assert_eq!(pool.get_max_open(), 1);
 }
 
@@ -275,32 +273,32 @@ async fn test_set_max_open_aggressive_cleanup() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 创建大量连接
+    // createconnection
     let mut connections = vec![];
     for _ in 0..20 {
         connections.push(pool.get().await.unwrap());
     }
 
-    // 同时获取 max_open 状态
+    // at the same timeget max_open state
     let initial_max_open = pool.get_max_open();
-    assert_eq!(initial_max_open, 32); // 默认值
+    assert_eq!(initial_max_open, 32); // value
 
-    // 释放一半连接
+    // releaseconnection
     for conn in connections.into_iter().take(10) {
         drop(conn);
     }
 
-    // 给连接回收一些时间
+    // giveconnection
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // 将 max_open 设置为需要清理很多连接的值
-    // 这会强制触发 loop 内的多轮清理 (pool.rs line 171)
+    // will max_open setascleanupconnectionvalue
+    // this loop cleanup (pool.rs line 171)
     pool.set_max_open(5);
 
-    // 验证设置生效
+    // verifyset
     assert_eq!(pool.get_max_open(), 5);
 
-    // 验证 max_idle 也被相应调整
+    // verify max_idle byadjust
     assert_eq!(pool.get_max_idle_conns(), 5);
 }
 
@@ -311,14 +309,14 @@ async fn test_set_max_idle_conns_zero_validation() {
 
     let original_max_idle = pool.get_max_idle_conns();
 
-    // 测试 set_max_idle_conns 设置为 0
-    // 与 set_max_open 不同，set_max_idle_conns 没有对 0 值的早期返回验证
+    // test set_max_idle_conns setas 0
+    // with set_max_open ，set_max_idle_conns to 0 valuereturnverify
     pool.set_max_idle_conns(0);
 
-    // 验证是否设置了 0 值（这暴露了缺少输入验证的问题）
+    // verifyset 0 value（thisverify）
     assert_eq!(pool.get_max_idle_conns(), 0);
 
-    // 恢复正常值
+    // value
     pool.set_max_idle_conns(original_max_idle);
     assert_eq!(pool.get_max_idle_conns(), original_max_idle);
 }
@@ -328,33 +326,33 @@ async fn test_max_idle_exceeds_max_open_state_inconsistency() {
     let manager = TestManager::new();
     let pool = Pool::new(manager);
 
-    // 首先设置一个较小的 max_open
+    // firstset max_open
     pool.set_max_open(5);
     assert_eq!(pool.get_max_open(), 5);
-    assert_eq!(pool.get_max_idle_conns(), 5); // set_max_open 应该自动调整 max_idle
+    assert_eq!(pool.get_max_idle_conns(), 5); // set_max_open shouldadjust max_idle
 
-    // 现在，通过 set_max_idle_conns 设置一个超过 max_open 的值
-    // 这暴露了状态不一致问题：max_idle > max_open
+    // at/in，pass set_max_idle_conns set max_open value
+    // thisstate：max_idle > max_open
     pool.set_max_idle_conns(10);
 
-    // 验证不一致状态：max_idle 确实可以超过 max_open
+    // verifystate：max_idle  max_open
     assert_eq!(pool.get_max_open(), 5);
-    assert_eq!(pool.get_max_idle_conns(), 10); // 这个值大于 max_open，是不一致的
+    assert_eq!(pool.get_max_idle_conns(), 10); // thisvalue max_open，
 
-    // 测试这种不一致状态下的行为 - 使用较少的连接避免卡死
+    // testthisstateas - makeconnection
     let mut connections = vec![];
     for _ in 0..3 {
         connections.push(pool.get().await.unwrap());
     }
 
-    // 释放连接
+    // releaseconnection
     drop(connections);
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // 即使 max_idle 设置为 10，实际的空闲连接不应该超过 max_open (5)
+    // make max_idle setas 10，idleconnectionshould max_open (5)
     let state = pool.state();
-    assert!(state.idle <= 3, "实际空闲连接数不应该超过创建的连接数");
-    assert!(state.connections <= 5, "总连接数不应该超过 max_open");
+    assert!(state.idle <= 3, "idleconnectionshouldcreateconnection");
+    assert!(state.connections <= 5, "connectionshould max_open");
 }
 
 #[tokio::test]
@@ -365,38 +363,36 @@ async fn test_set_max_idle_conns_cleanup_robustness() {
     pool.set_max_open(10);
     pool.set_max_idle_conns(5);
 
-    // 创建一些连接
+    // createconnection
     let mut connections = vec![];
     for _ in 0..3 {
         connections.push(pool.get().await.unwrap());
     }
 
-    // 释放连接让它们进入空闲队列
+    // releaseconnectionletidle
     drop(connections);
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     let initial_state = pool.state();
-    println!("设置前的状态: {}", initial_state);
 
-    // 设置一个更小的值，触发清理逻辑
+    // setvalue，cleanup
     pool.set_max_idle_conns(1);
 
-    // 等待清理生效
+    // waitcleanup
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     let final_state = pool.state();
-    println!("设置后的状态: {}", final_state);
 
-    // 验证清理逻辑是否正确处理了 try_recv 失败的情况
-    // 当前实现没有检查 try_recv 的返回值，可能导致 connections 计数不准确
-    assert!(final_state.idle <= 1, "空闲连接数应该 <= 1");
+    // verifycleanuphandle try_recv failcase
+    // whencheck try_recv returnvalue， connections
+    assert!(final_state.idle <= 1, "idleconnectionshould <= 1");
 
-    // 验证 connections 计数是否准确
-    // idle + in_use 应该等于 connections
+    // verify connections
+    // idle + in_use should connections
     assert_eq!(
         final_state.idle + final_state.in_use,
         final_state.connections,
-        "connections 计数不准确：idle + in_use = {}, connections = {}",
+        "connections ：idle + in_use = {}, connections = {}",
         final_state.idle + final_state.in_use,
         final_state.connections
     );

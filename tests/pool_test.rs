@@ -688,7 +688,7 @@ async fn test_connection_check_success_path() {
         }
 
         async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-            // 模拟成功的检查，这会触发 Ok(_) => { 分支 (pool.rs line 123)
+            // successcheck，this Ok(_) => {  (pool.rs line 123)
             if conn.valid {
                 Ok(())
             } else {
@@ -700,9 +700,9 @@ async fn test_connection_check_success_path() {
     let manager = CheckManager::default();
     let pool = Pool::new(manager);
 
-    // 获取连接，这将通过成功的检查路径
+    // get connection，thiswillpasssuccesscheck
     let _guard = pool.get().await.unwrap();
-    // 当 guard 被创建时，它会通过连接检查，触发 pool.rs line 123 的 Ok 分支
+    // when guard bycreate，passconnectioncheck， pool.rs line 123  Ok
 }
 
 #[tokio::test]

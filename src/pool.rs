@@ -159,7 +159,7 @@ impl<M: Manager> Pool<M> {
             return;
         }
         self.max_open.store(n, Ordering::SeqCst);
-        // 确保 max_idle 不超过 max_open
+        // Ensure max_idle does not exceed max_open
         let current_max_idle = self.max_idle.load(Ordering::SeqCst);
         if current_max_idle > n {
             self.max_idle.store(n, Ordering::SeqCst);
@@ -180,10 +180,10 @@ impl<M: Manager> Pool<M> {
         self.max_open.load(Ordering::SeqCst)
     }
 
-    /// 设置最大空闲连接数
+    /// Set maximum number of idle connections
     pub fn set_max_idle_conns(&self, n: u64) {
         self.max_idle.store(n, Ordering::SeqCst);
-        // 清理多余的空闲连接
+        // Clean up excess idle connections
         while self.idle_send.len() > n as usize {
             _ = self.idle_recv.try_recv();
             if self.connections.load(Ordering::SeqCst) > 0 {
@@ -192,7 +192,7 @@ impl<M: Manager> Pool<M> {
         }
     }
 
-    /// 获取最大空闲连接数
+    /// Get maximum number of idle connections
     pub fn get_max_idle_conns(&self) -> u64 {
         self.max_idle.load(Ordering::SeqCst)
     }
