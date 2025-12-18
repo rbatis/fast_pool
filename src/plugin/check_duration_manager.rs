@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::duration::AtomicDuration;
 use crate::Manager;
 
-/// `CheckDurationConnectionManager` is a manager wrapper that implements connection validation
+/// `CheckDurationManager` is a manager wrapper that implements connection validation
 /// based on a specified idle duration or connection lifetime.
 ///
 /// This manager can operate in two modes:
@@ -15,7 +15,7 @@ use crate::Manager;
 /// ```no_run
 /// use std::time::Duration;
 /// use fast_pool::{Manager, Pool};
-/// use fast_pool::plugin::CheckDurationConnectionManager;
+/// use fast_pool::plugin::CheckDurationManager;
 /// 
 /// // Assume we have some database manager that implements Manager trait
 /// struct MyDatabaseManager;
@@ -34,10 +34,10 @@ use crate::Manager;
 /// }
 /// 
 /// let base_manager = MyDatabaseManager;
-/// let duration_manager = CheckDurationConnectionManager::new(base_manager, Duration::from_secs(60));
+/// let duration_manager = CheckDurationManager::new(base_manager, Duration::from_secs(60));
 /// let pool = Pool::new(duration_manager);
 /// ```
-pub struct CheckDurationConnectionManager<M: Manager> {
+pub struct CheckDurationManager<M: Manager> {
     /// The underlying connection manager that handles the actual connection operations
     pub manager: M,
     /// Minimum duration between actual connection checks
@@ -46,15 +46,15 @@ pub struct CheckDurationConnectionManager<M: Manager> {
     pub instant: AtomicDuration,
 }
 
-impl<M: Manager> CheckDurationConnectionManager<M> {
-    /// Creates a new `CheckDurationConnectionManager` with the specified manager and check duration.
+impl<M: Manager> CheckDurationManager<M> {
+    /// Creates a new `CheckDurationManager` with the specified manager and check duration.
     ///
     /// # Parameters
     /// - `manager`: The underlying connection manager
     /// - `duration`: The minimum duration that must pass before performing an actual check
     ///
     /// # Returns
-    /// A new `CheckDurationConnectionManager` instance
+    /// A new `CheckDurationManager` instance
     pub fn new(manager: M, duration: Duration) -> Self {
         Self {
             manager,
@@ -64,7 +64,7 @@ impl<M: Manager> CheckDurationConnectionManager<M> {
     }
 }
 
-impl<M: Manager> Manager for CheckDurationConnectionManager<M> {
+impl<M: Manager> Manager for CheckDurationManager<M> {
     type Connection = M::Connection;
     type Error = M::Error;
 

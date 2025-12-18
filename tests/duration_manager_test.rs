@@ -92,14 +92,14 @@ impl Manager for CheckCounterManager {
     }
 }
 
-/// CheckDurationConnectionManager implementation
-struct CheckDurationConnectionManager<M: Manager> {
+/// CheckDurationManager implementation
+struct CheckDurationManager<M: Manager> {
     pub manager: M,
     pub duration: Duration,
     pub last_check: std::sync::Mutex<Option<std::time::SystemTime>>,
 }
 
-impl<M: Manager> CheckDurationConnectionManager<M> {
+impl<M: Manager> CheckDurationManager<M> {
     fn new(manager: M, duration: Duration) -> Self {
         Self {
             manager,
@@ -109,7 +109,7 @@ impl<M: Manager> CheckDurationConnectionManager<M> {
     }
 }
 
-impl<M: Manager> Manager for CheckDurationConnectionManager<M> {
+impl<M: Manager> Manager for CheckDurationManager<M> {
     type Connection = M::Connection;
     type Error = M::Error;
 
@@ -150,7 +150,7 @@ impl<M: Manager> Manager for CheckDurationConnectionManager<M> {
 async fn test_check_duration_manager_basic() {
     let counter_manager = CheckCounterManager::new();
     // Create a duration manager that only checks every 500ms
-    let duration_manager = CheckDurationConnectionManager::new(counter_manager.clone(), Duration::from_millis(500));
+    let duration_manager = CheckDurationManager::new(counter_manager.clone(), Duration::from_millis(500));
     let pool = Pool::new(duration_manager);
     
     // Get a connection and immediately return it to the pool
@@ -178,7 +178,7 @@ async fn test_check_duration_manager_concurrent() {
     let check_count_tracker = counter_manager.check_count.clone();
     
     // Create a duration manager with a longer check interval
-    let duration_manager = CheckDurationConnectionManager::new(counter_manager, Duration::from_millis(200));
+    let duration_manager = CheckDurationManager::new(counter_manager, Duration::from_millis(200));
     let pool = Pool::new(duration_manager);
     
     // Get and release 10 connections rapidly
@@ -207,7 +207,7 @@ async fn test_check_duration_manager_invalid_connection() {
     let check_count_tracker = counter_manager.check_count.clone();
     
     // Create a duration manager with a moderate check interval
-    let duration_manager = CheckDurationConnectionManager::new(counter_manager, Duration::from_millis(100));
+    let duration_manager = CheckDurationManager::new(counter_manager, Duration::from_millis(100));
     let pool = Pool::new(duration_manager);
     
     // Get a connection and make it invalid
@@ -220,7 +220,7 @@ async fn test_check_duration_manager_invalid_connection() {
     
     // Get a new connection immediately - shouldn't trigger another check due to duration
     // NOTE: Since our manager skips the check, the invalid connection will be returned
-    // without validation. This is expected behavior for the CheckDurationConnectionManager!
+    // without validation. This is expected behavior for the CheckDurationManager!
     let conn = pool.get().await.unwrap();
     
     // We expect the connection to still be invalid since checks are being skipped

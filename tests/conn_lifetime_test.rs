@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::sync::Arc;
 use fast_pool::{Manager, Pool};
-use fast_pool::plugin::CheckDurationConnectionManager;
+use fast_pool::plugin::CheckDurationManager;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ async fn test_conn_max_lifetime_basic() {
     println!("=== 测试基本连接生命周期管理 ===");
 
     let base_manager = TestManager::new(Some(Duration::from_millis(200))); // 200ms生命周期
-    let lifetime_manager = CheckDurationConnectionManager::new(
+    let lifetime_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(50) // 每50ms检查一次
     );
@@ -102,7 +102,7 @@ async fn test_conn_max_lifetime_with_check_duration() {
     println!("=== 测试带检查间隔的连接生命周期管理 ===");
 
     let base_manager = TestManager::new(Some(Duration::from_millis(100))); // 100ms生命周期
-    let lifetime_manager = CheckDurationConnectionManager::new(
+    let lifetime_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(200) // 每200ms检查一次，比生命周期长
     );
@@ -135,7 +135,7 @@ async fn test_no_max_lifetime() {
     println!("=== 测试无生命周期限制的情况 ===");
 
     let base_manager = TestManager::new(None); // 无生命周期限制
-    let no_limit_manager = CheckDurationConnectionManager::new(
+    let no_limit_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(100) // 仍然有检查间隔
     );
@@ -166,7 +166,7 @@ async fn test_conn_max_lifetime_concurrent() {
     println!("=== 测试并发环境下的连接生命周期 ===");
 
     let base_manager = TestManager::new(Some(Duration::from_millis(150)));
-    let lifetime_manager = CheckDurationConnectionManager::new(
+    let lifetime_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(50) // 频繁检查
     );
@@ -230,7 +230,7 @@ async fn test_check_duration_manager_only() {
     println!("=== 测试仅使用检查间隔管理（无生命周期） ===");
 
     let base_manager = TestManager::new(None);
-    let check_manager = CheckDurationConnectionManager::new(
+    let check_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(100) // 仅检查间隔，无生命周期限制
     );
@@ -263,7 +263,7 @@ async fn test_edge_cases() {
 
     // 测试极短的生命周期
     let base_manager = TestManager::new(Some(Duration::from_millis(1)));
-    let lifetime_manager = CheckDurationConnectionManager::new(
+    let lifetime_manager = CheckDurationManager::new(
         base_manager,
         Duration::from_millis(10)
     );
@@ -281,7 +281,7 @@ async fn test_edge_cases() {
 
     // 测试极长的检查间隔
     let base_manager2 = TestManager::new(Some(Duration::from_millis(50)));
-    let long_interval_manager = CheckDurationConnectionManager::new(
+    let long_interval_manager = CheckDurationManager::new(
         base_manager2,
         Duration::from_millis(1000) // 很长的检查间隔
     );
