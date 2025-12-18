@@ -1,3 +1,4 @@
+use fast_pool::plugin::{CheckMode, DurationManager};
 use fast_pool::{Manager, Pool};
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
@@ -708,6 +709,15 @@ async fn test_connection_check_success_path() {
 #[tokio::test]
 async fn test_downcast() {
     let p = Pool::new(TestManager {});
+    p.set_max_open(1);
+    let manager = p.downcast_manager::<TestManager>().unwrap();
+    manager.hello();
+}
+
+
+#[tokio::test]
+async fn test_downcast2() {
+    let p = Pool::new(DurationManager::new(TestManager {}, CheckMode::NoLimit));
     p.set_max_open(1);
     let manager = p.downcast_manager::<TestManager>().unwrap();
     manager.hello();
