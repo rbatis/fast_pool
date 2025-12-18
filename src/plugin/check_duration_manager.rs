@@ -1,6 +1,8 @@
-use std::time::{Duration, Instant};
-use crate::Manager;
+use std::{sync::atomic::AtomicI8, time::{Duration, Instant}};
+use atomic::Atomic;
+use crate::{Manager};
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{Ordering};
 
 /// Connection check modes
 #[derive(Debug, Clone)]
@@ -11,6 +13,62 @@ pub enum CheckMode {
     SkipInterval(Duration),
     /// Force connection error if exceeded maximum lifetime
     MaxLifetime(Duration),
+}
+
+impl CheckMode{
+  fn as_i8(&self) -> i8 {
+      match self {
+          CheckMode::NoLimit => 0,
+          CheckMode::SkipInterval(_) => 1,
+          CheckMode::MaxLifetime(_) => 2,
+      }
+  }
+
+  fn as_duration(&self) -> Atomic<u128> {
+      match self {
+          CheckMode::NoLimit => Atomic::new(Duration::from_secs(0).as_nanos()),
+          CheckMode::SkipInterval(duration) => Atomic::new(duration.clone().as_nanos()),
+          CheckMode::MaxLifetime(duration) => Atomic::new(duration.clone().as_nanos()),
+      }
+  }
+
+  fn new(mode: i8, duration:u128) -> Self { 
+    let secs = (duration / 1_000_000_000) as u64;
+    let nanos = (duration % 1_000_000_000) as u32;
+    match mode {
+        0 => CheckMode::NoLimit,
+        1 => CheckMode::SkipInterval(Duration::new(secs,nanos)),
+        2 => CheckMode::MaxLifetime(Duration::new(secs,nanos)),
+        _ => CheckMode::NoLimit,
+    }
+  }
+}
+
+pub struct CheckModeAtomic{
+    pub mode: AtomicI8,
+    pub duration: Atomic<u128>,
+}
+
+impl CheckModeAtomic{
+    pub fn new(mode: CheckMode) -> Self {
+        let mode_value:i8 = mode.as_i8();
+        let duration = mode.as_duration();
+        Self{
+            mode: AtomicI8::new(mode_value),
+            duration:  duration,
+        }
+    }
+
+    pub fn set_mode(&self, mode:CheckMode){
+        self.mode.store(mode.as_i8(), Ordering::Relaxed);
+        self.duration.store(mode.as_duration().load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+
+    pub fn get_mode(&self) -> CheckMode{
+        let mode = self.mode.load(Ordering::Relaxed);
+        let duration = self.duration.load(Ordering::Relaxed);
+        CheckMode::new(mode, duration)
+    }
 }
 
 
@@ -66,7 +124,7 @@ pub struct CheckDurationManager<M: Manager> {
     /// The underlying connection manager
     pub manager: M,
     /// Check strategy mode
-    pub mode: CheckMode,
+    pub mode: CheckModeAtomic,
 }
 
 impl<M: Manager> CheckDurationManager<M> {
@@ -78,7 +136,7 @@ impl<M: Manager> CheckDurationManager<M> {
     pub fn new(manager: M, mode: CheckMode) -> Self {
         Self {
             manager,
-            mode,
+            mode:CheckModeAtomic::new(mode),
         }
     }
 }
@@ -96,7 +154,7 @@ impl<M: Manager> Manager for CheckDurationManager<M> {
 
     /// Checks connection validity based on the configured mode.
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        match &self.mode {
+        match &self.mode.get_mode() {
             CheckMode::NoLimit => {
                 //do nothing
             }
