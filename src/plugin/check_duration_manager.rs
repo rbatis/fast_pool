@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 use crate::Manager;
+use std::ops::{Deref, DerefMut};
 
 /// Connection check modes
 #[derive(Debug, Clone)]
@@ -10,6 +11,26 @@ pub enum CheckMode {
     SkipInterval(Duration),
     /// Force connection error if exceeded maximum lifetime
     MaxLifetime(Duration),
+}
+
+
+pub struct DurationConnection<T>{
+    inner:T,
+    instant:Instant,
+}
+
+impl <T>Deref for DurationConnection<T>{
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl <T>DerefMut for DurationConnection<T>{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+
 }
 
 /// Connection manager that limits check frequency to reduce overhead.
@@ -46,8 +67,6 @@ pub struct CheckDurationManager<M: Manager> {
     pub manager: M,
     /// Check strategy mode
     pub mode: CheckMode,
-    /// When the last check was performed
-    pub last_check: Instant,
 }
 
 impl<M: Manager> CheckDurationManager<M> {
@@ -60,17 +79,19 @@ impl<M: Manager> CheckDurationManager<M> {
         Self {
             manager,
             mode,
-            last_check: Instant::now(),
         }
     }
 }
 
 impl<M: Manager> Manager for CheckDurationManager<M> {
-    type Connection = M::Connection;
+    type Connection = DurationConnection<M::Connection>;
     type Error = M::Error;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        self.manager.connect().await
+        Ok(DurationConnection{
+           inner: self.manager.connect().await?,
+           instant: Instant::now(),
+        })
     }
 
     /// Checks connection validity based on the configured mode.
@@ -81,13 +102,13 @@ impl<M: Manager> Manager for CheckDurationManager<M> {
             }
             CheckMode::SkipInterval(duration) => {
                 // Skip check if not enough time has passed
-                if self.last_check.elapsed() < *duration {
+                if conn.instant.elapsed() < *duration {
                     return Ok(());
                 }
             }
             CheckMode::MaxLifetime(max_lifetime) => {
                 // Check if connection exceeded maximum lifetime
-                if self.last_check.elapsed() > *max_lifetime {
+                if conn.instant.elapsed() > *max_lifetime {
                     return Err(M::Error::from("connection exceeded max lifetime"));
                 }
             }
