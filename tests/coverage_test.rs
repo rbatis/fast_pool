@@ -1,7 +1,7 @@
-use fast_pool::{Pool, Manager, ConnectionGuard};
 use fast_pool::duration::AtomicDuration;
-use std::time::Duration;
+use fast_pool::{ConnectionGuard, Manager, Pool};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 #[derive(Debug, Default)]
 pub struct TestManager {

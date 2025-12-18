@@ -1,8 +1,11 @@
-use std::{sync::atomic::AtomicI8, time::{Duration, Instant}};
+use crate::Manager;
 use atomic::Atomic;
-use crate::{Manager};
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{Ordering};
+use std::sync::atomic::Ordering;
+use std::{
+    sync::atomic::AtomicI8,
+    time::{Duration, Instant},
+};
 
 /// Connection check modes
 #[derive(Debug, Clone)]
@@ -15,80 +18,81 @@ pub enum CheckMode {
     MaxLifetime(Duration),
 }
 
-impl CheckMode{
-  fn as_i8(&self) -> i8 {
-      match self {
-          CheckMode::NoLimit => 0,
-          CheckMode::SkipInterval(_) => 1,
-          CheckMode::MaxLifetime(_) => 2,
-      }
-  }
-
-  fn as_duration(&self) -> Atomic<u128> {
-      match self {
-          CheckMode::NoLimit => Atomic::new(Duration::from_secs(0).as_nanos()),
-          CheckMode::SkipInterval(duration) => Atomic::new(duration.clone().as_nanos()),
-          CheckMode::MaxLifetime(duration) => Atomic::new(duration.clone().as_nanos()),
-      }
-  }
-
-  fn new(mode: i8, duration:u128) -> Self { 
-    let secs = (duration / 1_000_000_000) as u64;
-    let nanos = (duration % 1_000_000_000) as u32;
-    match mode {
-        0 => CheckMode::NoLimit,
-        1 => CheckMode::SkipInterval(Duration::new(secs,nanos)),
-        2 => CheckMode::MaxLifetime(Duration::new(secs,nanos)),
-        _ => CheckMode::NoLimit,
+impl CheckMode {
+    fn as_i8(&self) -> i8 {
+        match self {
+            CheckMode::NoLimit => 0,
+            CheckMode::SkipInterval(_) => 1,
+            CheckMode::MaxLifetime(_) => 2,
+        }
     }
-  }
+
+    fn as_duration(&self) -> Atomic<u128> {
+        match self {
+            CheckMode::NoLimit => Atomic::new(Duration::from_secs(0).as_nanos()),
+            CheckMode::SkipInterval(duration) => Atomic::new(duration.clone().as_nanos()),
+            CheckMode::MaxLifetime(duration) => Atomic::new(duration.clone().as_nanos()),
+        }
+    }
+
+    fn new(mode: i8, duration: u128) -> Self {
+        let secs = (duration / 1_000_000_000) as u64;
+        let nanos = (duration % 1_000_000_000) as u32;
+        match mode {
+            0 => CheckMode::NoLimit,
+            1 => CheckMode::SkipInterval(Duration::new(secs, nanos)),
+            2 => CheckMode::MaxLifetime(Duration::new(secs, nanos)),
+            _ => CheckMode::NoLimit,
+        }
+    }
 }
 
-pub struct CheckModeAtomic{
+pub struct CheckModeAtomic {
     pub mode: AtomicI8,
     pub duration: Atomic<u128>,
 }
 
-impl CheckModeAtomic{
+impl CheckModeAtomic {
     pub fn new(mode: CheckMode) -> Self {
-        let mode_value:i8 = mode.as_i8();
+        let mode_value: i8 = mode.as_i8();
         let duration = mode.as_duration();
-        Self{
+        Self {
             mode: AtomicI8::new(mode_value),
-            duration:  duration,
+            duration: duration,
         }
     }
 
-    pub fn set_mode(&self, mode:CheckMode){
+    pub fn set_mode(&self, mode: CheckMode) {
         self.mode.store(mode.as_i8(), Ordering::Relaxed);
-        self.duration.store(mode.as_duration().load(Ordering::Relaxed), Ordering::Relaxed);
+        self.duration.store(
+            mode.as_duration().load(Ordering::Relaxed),
+            Ordering::Relaxed,
+        );
     }
 
-    pub fn get_mode(&self) -> CheckMode{
+    pub fn get_mode(&self) -> CheckMode {
         let mode = self.mode.load(Ordering::Relaxed);
         let duration = self.duration.load(Ordering::Relaxed);
         CheckMode::new(mode, duration)
     }
 }
 
-
-pub struct DurationConnection<T>{
-    inner:T,
-    instant:Instant,
+pub struct DurationConnection<T> {
+    inner: T,
+    instant: Instant,
 }
 
-impl <T>Deref for DurationConnection<T>{
+impl<T> Deref for DurationConnection<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 
-impl <T>DerefMut for DurationConnection<T>{
+impl<T> DerefMut for DurationConnection<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
-
 }
 
 /// Connection manager that limits check frequency to reduce overhead.
@@ -136,7 +140,7 @@ impl<M: Manager> CheckDurationManager<M> {
     pub fn new(manager: M, mode: CheckMode) -> Self {
         Self {
             manager,
-            mode:CheckModeAtomic::new(mode),
+            mode: CheckModeAtomic::new(mode),
         }
     }
 }
@@ -146,9 +150,9 @@ impl<M: Manager> Manager for CheckDurationManager<M> {
     type Error = M::Error;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        Ok(DurationConnection{
-           inner: self.manager.connect().await?,
-           instant: Instant::now(),
+        Ok(DurationConnection {
+            inner: self.manager.connect().await?,
+            instant: Instant::now(),
         })
     }
 
@@ -173,4 +177,4 @@ impl<M: Manager> Manager for CheckDurationManager<M> {
         }
         self.manager.check(conn).await
     }
-} 
+}

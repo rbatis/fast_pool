@@ -3,10 +3,10 @@
 #[macro_use]
 mod defer;
 pub mod duration;
-pub mod state;
 pub mod guard;
-pub mod pool;
 pub mod plugin;
+pub mod pool;
+pub mod state;
 
 /// Manager create Connection and check Connection
 pub trait Manager {
@@ -20,7 +20,6 @@ pub trait Manager {
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error>;
 }
 
-pub use pool::Pool;
 pub use guard::ConnectionGuard;
+pub use pool::Pool;
 pub use state::State;
-

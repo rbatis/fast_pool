@@ -1,8 +1,8 @@
-use std::time::Duration;
-use std::sync::Arc;
-use fast_pool::{Manager, Pool};
 use fast_pool::plugin::{CheckDurationManager, CheckMode};
+use fast_pool::{Manager, Pool};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct TestConnection {
@@ -71,10 +71,7 @@ async fn test_check_mode_no_limit() {
     println!("=== 测试 NoLimit 模式 ===");
 
     let base_manager = TestManager::new(None);
-    let manager = CheckDurationManager::new(
-        base_manager,
-        CheckMode::NoLimit
-    );
+    let manager = CheckDurationManager::new(base_manager, CheckMode::NoLimit);
     let pool = Pool::new(manager);
 
     // 获取连接并测试多次检查
@@ -100,7 +97,7 @@ async fn test_check_mode_skip_interval() {
     let base_manager = TestManager::new(None);
     let manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(100))
+        CheckMode::SkipInterval(Duration::from_millis(100)),
     );
     let pool = Pool::new(manager);
 
@@ -129,7 +126,7 @@ async fn test_check_mode_max_lifetime() {
     let base_manager = TestManager::new(None);
     let manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::MaxLifetime(Duration::from_millis(150))
+        CheckMode::MaxLifetime(Duration::from_millis(150)),
     );
     let pool = Pool::new(manager);
 
@@ -145,7 +142,11 @@ async fn test_check_mode_max_lifetime() {
     // 再次获取连接应该失败或创建新连接
     match pool.get().await {
         Ok(new_conn) => {
-            println!("获取到新连接: ID = {}, 年龄 = {:?}", new_conn.id, new_conn.age());
+            println!(
+                "获取到新连接: ID = {}, 年龄 = {:?}",
+                new_conn.id,
+                new_conn.age()
+            );
             // 如果池创建了新连接，ID应该不同
             assert_ne!(conn_id, new_conn.id);
             drop(new_conn);
@@ -166,7 +167,7 @@ async fn test_conn_max_lifetime_basic() {
     let base_manager = TestManager::new(Some(Duration::from_millis(200))); // 200ms生命周期
     let manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(50)) // 每50ms检查一次
+        CheckMode::SkipInterval(Duration::from_millis(50)), // 每50ms检查一次
     );
     let pool = Pool::new(manager);
 
@@ -181,7 +182,11 @@ async fn test_conn_max_lifetime_basic() {
 
     // 再次获取连接，应该获得一个新的连接（旧的已过期）
     let new_conn = pool.get().await.unwrap();
-    println!("获取新连接: ID = {}, 年龄 = {:?}", new_conn.id, new_conn.age());
+    println!(
+        "获取新连接: ID = {}, 年龄 = {:?}",
+        new_conn.id,
+        new_conn.age()
+    );
 
     // 新连接的ID应该不同
     assert_ne!(conn_id, new_conn.id);
@@ -197,7 +202,7 @@ async fn test_conn_max_lifetime_with_check_duration() {
     let base_manager = TestManager::new(Some(Duration::from_millis(100))); // 100ms生命周期
     let manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(200)) // 每200ms检查一次，比生命周期长
+        CheckMode::SkipInterval(Duration::from_millis(200)), // 每200ms检查一次，比生命周期长
     );
     let pool = Pool::new(manager);
 
@@ -230,7 +235,7 @@ async fn test_no_max_lifetime() {
     let base_manager = TestManager::new(None); // 无生命周期限制
     let no_limit_manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(100)) // 仍然有检查间隔
+        CheckMode::SkipInterval(Duration::from_millis(100)), // 仍然有检查间隔
     );
     let pool = Pool::new(no_limit_manager);
 
@@ -261,7 +266,7 @@ async fn test_conn_max_lifetime_concurrent() {
     let base_manager = TestManager::new(Some(Duration::from_millis(150)));
     let lifetime_manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(50)) // 频繁检查
+        CheckMode::SkipInterval(Duration::from_millis(50)), // 频繁检查
     );
     let pool = Arc::new(Pool::new(lifetime_manager));
 
@@ -277,11 +282,19 @@ async fn test_conn_max_lifetime_concurrent() {
 
         let handle = tokio::spawn(async move {
             for j in 0..5 {
-                match pool_clone.get_timeout(Some(Duration::from_millis(100))).await {
+                match pool_clone
+                    .get_timeout(Some(Duration::from_millis(100)))
+                    .await
+                {
                     Ok(conn) => {
                         success.fetch_add(1, Ordering::SeqCst);
-                        println!("Task {}-{} 获取连接: ID = {}, 年龄 = {:?}",
-                                i, j, conn.id, conn.age());
+                        println!(
+                            "Task {}-{} 获取连接: ID = {}, 年龄 = {:?}",
+                            i,
+                            j,
+                            conn.id,
+                            conn.age()
+                        );
 
                         // 模拟使用连接
                         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -325,7 +338,7 @@ async fn test_check_duration_manager_only() {
     let base_manager = TestManager::new(None);
     let check_manager = CheckDurationManager::new(
         base_manager,
-        CheckMode::SkipInterval(Duration::from_millis(100)) // 仅检查间隔，无生命周期限制
+        CheckMode::SkipInterval(Duration::from_millis(100)), // 仅检查间隔，无生命周期限制
     );
     let pool = Pool::new(check_manager);
 
@@ -356,10 +369,7 @@ async fn test_edge_cases() {
 
     // 测试极短的生命周期
     let base_manager = TestManager::new(Some(Duration::from_millis(1)));
-    let lifetime_manager = CheckDurationManager::new(
-        base_manager,
-        CheckMode::NoLimit
-    );
+    let lifetime_manager = CheckDurationManager::new(base_manager, CheckMode::NoLimit);
     let pool = Pool::new(lifetime_manager);
 
     let conn = pool.get().await.unwrap();
@@ -376,7 +386,7 @@ async fn test_edge_cases() {
     let base_manager2 = TestManager::new(Some(Duration::from_millis(50)));
     let long_interval_manager = CheckDurationManager::new(
         base_manager2,
-        CheckMode::SkipInterval(Duration::from_millis(1000)) // 很长的检查间隔
+        CheckMode::SkipInterval(Duration::from_millis(1000)), // 很长的检查间隔
     );
     let pool2 = Pool::new(long_interval_manager);
 

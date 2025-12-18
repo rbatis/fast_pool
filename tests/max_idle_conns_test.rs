@@ -1,7 +1,7 @@
-use std::time::Duration;
-use std::sync::Arc;
 use fast_pool::{Manager, Pool};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct TestConnection {
@@ -130,7 +130,10 @@ async fn test_set_max_idle_conns_with_concurrent_access() {
         let success = success_count.clone();
         let handle = tokio::spawn(async move {
             for j in 0..3 {
-                match pool_clone.get_timeout(Some(Duration::from_millis(50))).await {
+                match pool_clone
+                    .get_timeout(Some(Duration::from_millis(50)))
+                    .await
+                {
                     Ok(conn) => {
                         success.fetch_add(1, Ordering::SeqCst);
                         println!("Task {}-{} 获取连接: {}", i, j, conn.id);

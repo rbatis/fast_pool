@@ -1,3 +1,4 @@
+use crate::duration::AtomicDuration;
 use crate::guard::ConnectionGuard;
 use crate::state::State;
 use crate::Manager;
@@ -6,7 +7,6 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use crate::duration::AtomicDuration;
 
 /// Pool have manager, get/get_timeout Connection from Pool
 pub struct Pool<M: Manager> {
@@ -84,7 +84,6 @@ impl<M: Manager> Pool<M> {
         });
         let f = async {
             let v: Result<ConnectionGuard<M>, M::Error> = loop {
-
                 let connections = self.connections.load(Ordering::SeqCst)
                     + self.connecting.load(Ordering::SeqCst);
                 if connections < self.max_open.load(Ordering::SeqCst) {
@@ -134,18 +133,15 @@ impl<M: Manager> Pool<M> {
         };
         let conn = {
             match d {
-                None => {f.await?}
-                Some(duration) => {
-                    tokio::time::timeout(duration, f)
-                        .await
-                        .map_err(|_e| M::Error::from("get_timeout"))??
-                }
+                None => f.await?,
+                Some(duration) => tokio::time::timeout(duration, f)
+                    .await
+                    .map_err(|_e| M::Error::from("get_timeout"))??,
             }
         };
         Ok(conn)
     }
 
-    
     pub fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
@@ -221,5 +217,4 @@ impl<M: Manager> Pool<M> {
     pub fn get_timeout_check(&self) -> Option<Duration> {
         self.timeout_check.get()
     }
-
-    }
+}
