@@ -255,7 +255,7 @@ impl<M: Manager> Pool<M> {
     /// ```
     pub fn downcast_manager<T>(&self) -> Option<&T>
     where
-        T: Manager + std::any::Any + Send + Sync + 'static,
+        T: Manager,
     {
         // Get a reference to the manager as &dyn Any
         let any_ref = self.manager.as_ref() as &dyn std::any::Any;
