@@ -72,14 +72,6 @@ where
 
 // 运行命令: cargo bench --package fast_pool --performance
 // 或者: cargo bench
-//
-// 示例输出:
-// bench_pool               time:   [12.042 ms 12.123 ms 12.213 ms]
-//                         change: [-2.123% -1.823% -1.523%] (p = 0.00)
-//                         thrpt:  [8.1232 me 8.2915 me 8.4567 me]
-// #![feature(test)]
-// extern crate test;
-
 #[bench]
 fn bench_pool(b: &mut Bencher) {
     use async_trait::async_trait;
