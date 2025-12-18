@@ -16,5 +16,5 @@ homepage = "https://github.com/rbatis/fast_pool"
 async-trait = "0.1"
 futures-core = { version = "0.3" }
 tokio = { version = "1", features = ["time", "rt-multi-thread", "macros"] }
-flume = { version = "0.11.0", default-features = false, features = ["async"] }
+flume = { version = "0.12.0", default-features = false, features = ["async"] }
 atomic = "0.6"
