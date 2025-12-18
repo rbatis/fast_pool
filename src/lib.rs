@@ -9,7 +9,7 @@ pub mod pool;
 pub mod state;
 
 /// Manager create Connection and check Connection
-pub trait Manager {
+pub trait Manager: std::any::Any + Send + Sync {
     type Connection;
 
     type Error: for<'a> From<&'a str>;

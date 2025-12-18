@@ -217,4 +217,50 @@ impl<M: Manager> Pool<M> {
     pub fn get_timeout_check(&self) -> Option<Duration> {
         self.timeout_check.get()
     }
+
+    /// Downcast the manager to a concrete type.
+    ///
+    /// This function attempts to downcast the Arc<M> to a specific concrete type.
+    /// It's useful when you need to access the underlying manager's specific methods.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use fast_pool::{Manager, Pool};
+    /// use fast_pool::plugin::{DurationManager, CheckMode};
+    /// use std::time::Duration;
+    ///
+    /// struct MyManager;
+    ///
+    /// impl Manager for MyManager {
+    ///     type Connection = ();
+    ///     type Error = String;
+    ///
+    ///     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+    ///         Ok(())
+    ///     }
+    ///
+    ///     async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let duration_manager = DurationManager::new(MyManager, CheckMode::SkipInterval(Duration::from_secs(30)));
+    /// let pool = Pool::new(duration_manager);
+    ///
+    /// // Downcast to access DurationManager specific methods
+    /// if let Some(duration_manager) = pool.downcast_manager::<DurationManager<MyManager>>() {
+    ///     // Now you can access DurationManager-specific fields
+    ///     let mode = duration_manager.mode.get_mode();
+    /// }
+    /// ```
+    pub fn downcast_manager<T>(&self) -> Option<&T>
+    where
+        T: Manager + std::any::Any + Send + Sync + 'static,
+    {
+        // Get a reference to the manager as &dyn Any
+        let any_ref = self.manager.as_ref() as &dyn std::any::Any;
+        // Try to downcast to &T
+        let t = any_ref.downcast_ref::<T>()?;
+        Some(t)
+    }
 }

@@ -8,6 +8,15 @@ use std::time::Duration;
 #[derive(Debug)]
 pub struct TestManager {}
 
+impl TestManager {
+    pub fn new() -> TestManager {
+        TestManager {}
+    }
+    pub fn hello(&self) {
+        println!("hello")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TestConnection {
     pub inner: String,
@@ -694,4 +703,12 @@ async fn test_connection_check_success_path() {
     // 获取连接，这将通过成功的检查路径
     let _guard = pool.get().await.unwrap();
     // 当 guard 被创建时，它会通过连接检查，触发 pool.rs line 123 的 Ok 分支
+}
+
+#[tokio::test]
+async fn test_downcast() {
+    let p = Pool::new(TestManager {});
+    p.set_max_open(1);
+    let manager = p.downcast_manager::<TestManager>().unwrap();
+    manager.hello();
 }
