@@ -1,3 +1,3 @@
-mod check_duration_manager;
+mod duration_manager;
 
-pub use check_duration_manager::*;
+pub use duration_manager::*;

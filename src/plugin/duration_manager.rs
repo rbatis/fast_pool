@@ -104,7 +104,7 @@ impl<T> DerefMut for DurationConnection<T> {
 /// ```no_run
 /// use std::time::Duration;
 /// use fast_pool::{Manager, Pool};
-/// use fast_pool::plugin::{CheckDurationManager, CheckMode};
+/// use fast_pool::plugin::{DurationManager, CheckMode};
 ///
 /// struct MyManager;
 ///
@@ -121,18 +121,18 @@ impl<T> DerefMut for DurationConnection<T> {
 ///     }
 /// }
 ///
-/// let manager = CheckDurationManager::new(MyManager, CheckMode::SkipInterval(Duration::from_secs(30)));
+/// let manager = DurationManager::new(MyManager, CheckMode::SkipInterval(Duration::from_secs(30)));
 /// let pool = Pool::new(manager);
 /// ```
-pub struct CheckDurationManager<M: Manager> {
+pub struct DurationManager<M: Manager> {
     /// The underlying connection manager
     pub manager: M,
     /// Check strategy mode
     pub mode: CheckModeAtomic,
 }
 
-impl<M: Manager> CheckDurationManager<M> {
-    /// Creates a new `CheckDurationManager`.
+impl<M: Manager> DurationManager<M> {
+    /// Creates a new `DurationManager`.
     ///
     /// # Parameters
     /// - `manager`: The underlying connection manager
@@ -145,7 +145,7 @@ impl<M: Manager> CheckDurationManager<M> {
     }
 }
 
-impl<M: Manager> Manager for CheckDurationManager<M> {
+impl<M: Manager> Manager for DurationManager<M> {
     type Connection = DurationConnection<M::Connection>;
     type Error = M::Error;
 
