@@ -19,6 +19,7 @@ pub enum CheckMode {
 }
 
 impl CheckMode {
+    /// Convert mode to i8 for atomic storage
     fn as_i8(&self) -> i8 {
         match self {
             CheckMode::NoLimit => 0,
@@ -27,6 +28,7 @@ impl CheckMode {
         }
     }
 
+    /// Convert duration to atomic nanoseconds for storage
     fn as_duration(&self) -> Atomic<u128> {
         match self {
             CheckMode::NoLimit => Atomic::new(Duration::from_secs(0).as_nanos()),
@@ -35,6 +37,7 @@ impl CheckMode {
         }
     }
 
+    /// Reconstruct CheckMode from stored atomic values
     fn new(mode: i8, duration: u128) -> Self {
         let secs = (duration / 1_000_000_000) as u64;
         let nanos = (duration % 1_000_000_000) as u32;
@@ -47,12 +50,14 @@ impl CheckMode {
     }
 }
 
+/// Atomic storage for CheckMode configuration
 pub struct CheckModeAtomic {
     pub mode: AtomicI8,
     pub duration: Atomic<u128>,
 }
 
 impl CheckModeAtomic {
+    /// Create new atomic check mode storage
     pub fn new(mode: CheckMode) -> Self {
         let mode_value: i8 = mode.as_i8();
         let duration = mode.as_duration();
@@ -62,6 +67,7 @@ impl CheckModeAtomic {
         }
     }
 
+    /// Update check mode atomically
     pub fn set_mode(&self, mode: CheckMode) {
         self.mode.store(mode.as_i8(), Ordering::Relaxed);
         self.duration.store(
@@ -70,6 +76,7 @@ impl CheckModeAtomic {
         );
     }
 
+    /// Get current check mode
     pub fn get_mode(&self) -> CheckMode {
         let mode = self.mode.load(Ordering::Relaxed);
         let duration = self.duration.load(Ordering::Relaxed);
@@ -77,6 +84,7 @@ impl CheckModeAtomic {
     }
 }
 
+/// Connection wrapper with creation timestamp for lifetime tracking
 pub struct DurationConnection<T> {
     inner: T,
     instant: Instant,
@@ -132,11 +140,7 @@ pub struct DurationManager<M: Manager> {
 }
 
 impl<M: Manager> DurationManager<M> {
-    /// Creates a new `DurationManager`.
-    ///
-    /// # Parameters
-    /// - `manager`: The underlying connection manager
-    /// - `mode`: The check strategy mode
+    /// Create new DurationManager with check mode
     pub fn new(manager: M, mode: CheckMode) -> Self {
         Self {
             manager,
@@ -156,20 +160,20 @@ impl<M: Manager> Manager for DurationManager<M> {
         })
     }
 
-    /// Checks connection validity based on the configured mode.
+    /// Check connection based on configured mode strategy
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         match &self.mode.get_mode() {
             CheckMode::NoLimit => {
-                //do nothing
+                // Always perform the underlying check
             }
             CheckMode::SkipInterval(duration) => {
-                // Skip check if not enough time has passed
+                // Skip if within check interval
                 if conn.instant.elapsed() < *duration {
                     return Ok(());
                 }
             }
             CheckMode::MaxLifetime(max_lifetime) => {
-                // Check if connection exceeded maximum lifetime
+                // Fail if connection exceeded max lifetime
                 if conn.instant.elapsed() > *max_lifetime {
                     return Err(M::Error::from("connection exceeded max lifetime"));
                 }

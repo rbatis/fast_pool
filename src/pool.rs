@@ -8,21 +8,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Pool have manager, get/get_timeout Connection from Pool
+/// Connection pool with configurable manager and lifecycle management
 pub struct Pool<M: Manager> {
     pub manager: Arc<M>,
     pub idle_send: Arc<Sender<M::Connection>>,
     pub idle_recv: Arc<Receiver<M::Connection>>,
-    /// max open connection default 32
+    /// Maximum open connections (default: 32)
     pub max_open: Arc<AtomicU64>,
-    /// max idle connections, default is same as max_open
+    /// Maximum idle connections (default: same as max_open)
     pub max_idle: Arc<AtomicU64>,
     pub(crate) in_use: Arc<AtomicU64>,
     pub(crate) waits: Arc<AtomicU64>,
     pub(crate) connecting: Arc<AtomicU64>,
     pub(crate) checking: Arc<AtomicU64>,
     pub(crate) connections: Arc<AtomicU64>,
-    //timeout check connection default 10s
+    /// Connection check timeout (default: 10s)
     pub timeout_check: Arc<AtomicDuration>,
 }
 
@@ -52,6 +52,7 @@ impl<M: Manager> Clone for Pool<M> {
 }
 
 impl<M: Manager> Pool<M> {
+    /// Create new connection pool with default settings
     pub fn new(m: M) -> Self
     where
         M::Connection: Unpin,
@@ -73,10 +74,12 @@ impl<M: Manager> Pool<M> {
         }
     }
 
+    /// Get connection from pool (blocks until available)
     pub async fn get(&self) -> Result<ConnectionGuard<M>, M::Error> {
         self.get_timeout(None).await
     }
 
+    /// Get connection with optional timeout
     pub async fn get_timeout(&self, d: Option<Duration>) -> Result<ConnectionGuard<M>, M::Error> {
         self.waits.fetch_add(1, Ordering::SeqCst);
         defer!(|| {
@@ -142,6 +145,7 @@ impl<M: Manager> Pool<M> {
         Ok(conn)
     }
 
+    /// Get current pool state
     pub fn state(&self) -> State {
         State {
             max_open: self.max_open.load(Ordering::Relaxed),
@@ -154,6 +158,7 @@ impl<M: Manager> Pool<M> {
         }
     }
 
+    /// Set maximum open connections
     pub fn set_max_open(&self, n: u64) {
         if n == 0 {
             return;

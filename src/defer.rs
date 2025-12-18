@@ -1,3 +1,4 @@
+/// RAII guard that executes closure on drop
 pub struct Guard<F: FnMut()>(pub Option<F>);
 
 impl<F: FnMut()> Drop for Guard<F> {
@@ -8,6 +9,7 @@ impl<F: FnMut()> Drop for Guard<F> {
     }
 }
 
+/// Execute code when scope exits (similar to Go's defer)
 macro_rules! defer {
     ($func:block) => {
        let _guard = $crate::defer::Guard(Some( ||$func));

@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::Ordering;
 
-/// ConnectionGuard is a wrapper for Connection
+/// RAII guard that automatically returns connection to pool on drop
 pub struct ConnectionGuard<M: Manager> {
     pub inner: Option<M::Connection>,
     pool: Pool<M>,
@@ -11,6 +11,7 @@ pub struct ConnectionGuard<M: Manager> {
 }
 
 impl<M: Manager> ConnectionGuard<M> {
+    /// Create new connection guard
     pub fn new(conn: M::Connection, pool: Pool<M>) -> ConnectionGuard<M> {
         Self {
             inner: Some(conn),
@@ -19,6 +20,7 @@ impl<M: Manager> ConnectionGuard<M> {
         }
     }
 
+    /// Mark connection as checked and update pool stats
     pub fn set_checked(&mut self, checked: bool) {
         self.checked = checked;
         if checked {
@@ -50,12 +52,15 @@ impl<M: Manager> DerefMut for ConnectionGuard<M> {
 }
 
 impl<M: Manager> Drop for ConnectionGuard<M> {
+    /// Return connection to pool or cleanup failed connection
     fn drop(&mut self) {
         if self.checked == false {
+            // Failed connection - decrement connection count
             if self.pool.connections.load(Ordering::SeqCst) > 0 {
                 self.pool.connections.fetch_sub(1, Ordering::SeqCst);
             }
         } else {
+            // Valid connection - return to pool
             if let Some(v) = self.inner.take() {
                 _ = self.pool.recycle(v);
             }

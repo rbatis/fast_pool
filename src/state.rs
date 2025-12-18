@@ -1,20 +1,21 @@
 use std::fmt::{Display, Formatter};
 
+/// Current state of the connection pool
 #[derive(Debug, Eq, PartialEq)]
 pub struct State {
-    /// max open limit
+    /// Maximum open connections allowed
     pub max_open: u64,
-    /// connections = in_use number + idle number + connecting number
+    /// Total connections = in_use + idle + connecting
     pub connections: u64,
-    /// user use connection number
+    /// Currently active connections
     pub in_use: u64,
-    /// idle connection
+    /// Idle connections available
     pub idle: u64,
-    /// wait get connections number
+    /// Connections waiting to be acquired
     pub waits: u64,
-    /// connecting connections
+    /// Currently establishing connections
     pub connecting: u64,
-    /// checking connections
+    /// Currently being checked/validated
     pub checking: u64,
 }
 

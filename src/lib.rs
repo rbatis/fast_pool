@@ -8,15 +8,16 @@ pub mod plugin;
 pub mod pool;
 pub mod state;
 
-/// Manager create Connection and check Connection
+/// Trait for connection management and validation
 pub trait Manager: std::any::Any + Send + Sync {
     type Connection;
 
     type Error: for<'a> From<&'a str>;
 
-    ///create Connection and check Connection
+    /// Create new connection
     async fn connect(&self) -> Result<Self::Connection, Self::Error>;
-    ///check Connection is alive? if not return Error(Connection will be drop)
+
+    /// Validate connection is alive (return Error if connection should be dropped)
     async fn check(&self, conn: &mut Self::Connection) -> Result<(), Self::Error>;
 }
 
