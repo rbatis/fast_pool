@@ -87,7 +87,7 @@ impl CheckModeAtomic {
 /// Connection wrapper with creation timestamp for lifetime tracking
 pub struct DurationConnection<T> {
     inner: T,
-    instant: Instant,
+    instant: Option<Instant>,
 }
 
 impl<T> Deref for DurationConnection<T> {
@@ -156,7 +156,13 @@ impl<M: Manager> Manager for DurationManager<M> {
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         Ok(DurationConnection {
             inner: self.manager.connect().await?,
-            instant: Instant::now(),
+            instant: {
+                match self.mode.get_mode() {
+                    CheckMode::NoLimit => None,
+                    CheckMode::SkipInterval(_) => Some(Instant::now()),
+                    CheckMode::MaxLifetime(_) => Some(Instant::now()),
+                }
+            },
         })
     }
 
@@ -168,17 +174,35 @@ impl<M: Manager> Manager for DurationManager<M> {
             }
             CheckMode::SkipInterval(duration) => {
                 // Skip if within check interval
-                if conn.instant.elapsed() < *duration {
-                    return Ok(());
+                if let Some(instant) = conn.instant.as_ref() {
+                    if instant.elapsed() < *duration {
+                        return Ok(());
+                    }
                 }
             }
-            CheckMode::MaxLifetime(max_lifetime) => {
+            CheckMode::MaxLifetime(duration) => {
                 // Fail if connection exceeded max lifetime
-                if conn.instant.elapsed() > *max_lifetime {
-                    return Err(M::Error::from("connection exceeded max lifetime"));
+                if let Some(instant) = conn.instant.as_ref() {
+                    if instant.elapsed() > *duration {
+                       return Err(M::Error::from("connection exceeded max lifetime"));
+                    }
                 }
             }
         }
         self.manager.check(conn).await
+    }
+}
+
+
+impl<M: Manager> Deref for DurationManager<M> {
+    type Target = M;
+    fn deref(&self) -> &Self::Target {
+        &self.manager
+    }
+}
+
+impl<M: Manager> DerefMut for DurationManager<M> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.manager
     }
 }

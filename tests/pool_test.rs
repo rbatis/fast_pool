@@ -719,6 +719,6 @@ async fn test_downcast() {
 async fn test_downcast2() {
     let p = Pool::new(DurationManager::new(TestManager {}, CheckMode::NoLimit));
     p.set_max_open(1);
-    let manager = p.downcast_manager::<TestManager>().unwrap();
+    let manager = p.downcast_manager::<DurationManager<TestManager>>().unwrap();
     manager.hello();
 }
