@@ -2,7 +2,7 @@ use crate::duration::AtomicDuration;
 use crate::guard::ConnectionGuard;
 use crate::state::State;
 use crate::Manager;
-use crossfire::mpmc::unbounded_async;
+use crossfire::compat::mpmc::unbounded_async;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -11,8 +11,8 @@ use std::time::Duration;
 /// Connection pool with configurable manager and lifecycle management
 pub struct Pool<M: Manager> {
     pub manager: Arc<M>,
-    pub idle_send: Arc<crossfire::MTx<M::Connection>>,
-    pub idle_recv: Arc<crossfire::MAsyncRx<M::Connection>>,
+    pub idle_send: Arc<crossfire::compat::MTx<M::Connection>>,
+    pub idle_recv: Arc<crossfire::compat::MAsyncRx<M::Connection>>,
     /// Maximum open connections (default: 32)
     pub max_open: Arc<AtomicU64>,
     /// Maximum idle connections (default: same as max_open)
