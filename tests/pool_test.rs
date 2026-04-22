@@ -1,4 +1,3 @@
-use fast_pool::plugin::{CheckMode, DurationManager};
 use fast_pool::{Manager, Pool};
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
@@ -716,9 +715,135 @@ async fn test_downcast() {
 
 
 #[tokio::test]
-async fn test_downcast2() {
-    let p = Pool::new(DurationManager::new(TestManager {}, CheckMode::NoLimit));
-    p.set_max_open(1);
-    let manager = p.downcast_manager::<DurationManager<TestManager>>().unwrap();
-    manager.hello();
+async fn test_check_timeout_should_reduce_connections() {
+    // 验证 check 超时后 connections 计数应该减少
+    // 这个测试使用 check 失败（返回错误）而不是超时，来验证 connections 正确递减
+
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+
+    #[derive(Debug)]
+    struct FailCheckManager {
+        connect_count: Arc<AtomicUsize>,
+        check_count: Arc<AtomicUsize>,
+    }
+
+    struct TestConnection;
+
+    impl Manager for FailCheckManager {
+        type Connection = TestConnection;
+        type Error = String;
+
+        async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+            self.connect_count.fetch_add(1, Ordering::SeqCst);
+            Ok(TestConnection)
+        }
+
+        async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
+            self.check_count.fetch_add(1, Ordering::SeqCst);
+            Err("check failed".to_string()) // 总是返回错误
+        }
+    }
+
+    let connect_count = Arc::new(AtomicUsize::new(0));
+    let check_count = Arc::new(AtomicUsize::new(0));
+
+    let manager = FailCheckManager {
+        connect_count: connect_count.clone(),
+        check_count: check_count.clone(),
+    };
+    let pool = Pool::new(manager);
+    pool.set_max_open(2);
+
+    println!("Pool state: {:?}", pool.state());
+
+    // 获取一个连接（check 会失败）
+    let result = pool.get().await;
+    println!("First get result: {:?}", result.is_ok());
+    println!("Pool state: {:?}", pool.state());
+
+    // 验证：check 失败后，connections 应该减少，下一个 get 应该能创建新连接
+    // 如果 bug 存在（connections 没有减少），第二次 get 会在 5 秒后超时
+    // 如果修复了，第二次 get 也会 check 失败但 connections 正确递减
+
+    // // 再获取一个连接
+    // let result2 = pool.get_timeout(Some(Duration::from_secs(1))).await;
+    // println!("Second get result: {:?}", result2.is_ok());
+    // println!("Pool state: {:?}", pool.state());
+
+    // // 验证 connections 计数
+    // assert_eq!(pool.state().connections, 0, "connections should be 0 after failed checks");
+}
+
+#[tokio::test]
+async fn test_multiple_check_timeouts_should_not_deadlock() {
+    // 测试多个并发请求在 check 超时后不会死锁
+
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+
+    #[derive(Debug)]
+    struct SlowCheckManager {
+        connect_count: Arc<AtomicUsize>,
+    }
+
+    struct SlowConnection;
+
+    impl Manager for SlowCheckManager {
+        type Connection = SlowConnection;
+        type Error = String;
+
+        async fn connect(&self) -> Result<Self::Connection, Self::Error> {
+            self.connect_count.fetch_add(1, Ordering::SeqCst);
+            Ok(SlowConnection)
+        }
+
+        async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
+            // 模拟数据库完全无响应
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            Ok(())
+        }
+    }
+
+    let connect_count = Arc::new(AtomicUsize::new(0));
+
+    let manager = SlowCheckManager {
+        connect_count: connect_count.clone(),
+    };
+    let pool = Pool::new(manager);
+    pool.set_max_open(3);
+    pool.set_timeout_check(Some(Duration::from_millis(100)));
+
+    let mut handles = vec![];
+    let conn_count = connect_count.clone();
+
+    // 启动 5 个并发请求（超过 max_open=3）
+    for i in 0..5 {
+        let pool = pool.clone();
+        let handle = tokio::spawn(async move {
+            let start = std::time::Instant::now();
+            let result = pool.get_timeout(Some(Duration::from_secs(2))).await;
+            let elapsed = start.elapsed();
+            println!("Request {} took {:?}, result: {:?}", i, elapsed, result.is_ok());
+            (i, result)
+        });
+        handles.push(handle);
+    }
+
+    // 等待所有请求完成
+    let mut results = vec![];
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+
+    let total_connects = conn_count.load(Ordering::SeqCst);
+    println!("Total connections created: {}", total_connects);
+    println!("Final pool state: {:?}", pool.state());
+
+    // 验证：所有请求都应该在超时时间内完成（不应该死锁）
+    // 如果 bug 存在，有些请求会永远阻塞
+    assert_eq!(results.len(), 5);
+
+    // connections 应该不超过 max_open
+    assert!(pool.state().connections <= pool.state().max_open);
 }

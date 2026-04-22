@@ -128,6 +128,7 @@ impl<M: Manager> Pool<M> {
                     }
                     Err(_e) => {
                         drop(guard);
+                        tokio::task::yield_now().await;
                         continue;
                     }
                 }
@@ -135,12 +136,9 @@ impl<M: Manager> Pool<M> {
             v
         };
         let conn = {
-            match d {
-                None => f.await?,
-                Some(duration) => tokio::time::timeout(duration, f)
+           tokio::time::timeout(d.unwrap_or_else(|| self.timeout_check.get().unwrap_or_default()), f)
                     .await
-                    .map_err(|_e| M::Error::from("get_timeout"))??,
-            }
+                    .map_err(|_e| M::Error::from("get_timeout"))??
         };
         Ok(conn)
     }
