@@ -738,7 +738,7 @@ async fn test_check_timeout_should_reduce_connections() {
 
         async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
             self.check_count.fetch_add(1, Ordering::SeqCst);
-            Err("check failed".to_string()) // 总是返回错误
+            Err("check failed".to_string()) // always returns error
         }
     }
 
@@ -768,7 +768,7 @@ async fn test_check_timeout_should_reduce_connections() {
 
 #[tokio::test]
 async fn test_multiple_check_timeouts_should_not_deadlock() {
-    // 测试多个并发请求在 check 超时后不会死锁
+    // Ensures multiple concurrent requests do not deadlock after check timeouts
 
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
@@ -790,7 +790,7 @@ async fn test_multiple_check_timeouts_should_not_deadlock() {
         }
 
         async fn check(&self, _conn: &mut Self::Connection) -> Result<(), Self::Error> {
-            // 模拟数据库完全无响应
+            // Simulates database being completely unresponsive
             tokio::time::sleep(Duration::from_secs(3600)).await;
             Ok(())
         }
@@ -808,7 +808,7 @@ async fn test_multiple_check_timeouts_should_not_deadlock() {
     let mut handles = vec![];
     let conn_count = connect_count.clone();
 
-    // 启动 5 个并发请求（超过 max_open=3）
+    // Spawn 5 concurrent requests (exceeds max_open=3)
     for i in 0..5 {
         let pool = pool.clone();
         let handle = tokio::spawn(async move {
@@ -821,7 +821,7 @@ async fn test_multiple_check_timeouts_should_not_deadlock() {
         handles.push(handle);
     }
 
-    // 等待所有请求完成
+    // Wait for all requests to complete
     let mut results = vec![];
     for handle in handles {
         results.push(handle.await.unwrap());
@@ -831,10 +831,10 @@ async fn test_multiple_check_timeouts_should_not_deadlock() {
     println!("Total connections created: {}", total_connects);
     println!("Final pool state: {:?}", pool.state());
 
-    // 验证：所有请求都应该在超时时间内完成（不应该死锁）
-    // 如果 bug 存在，有些请求会永远阻塞
+    // Verify: all requests should complete within timeout (no deadlock)
+    // If the bug exists, some requests would block forever
     assert_eq!(results.len(), 5);
 
-    // connections 应该不超过 max_open
+    // connections should not exceed max_open
     assert!(pool.state().connections <= pool.state().max_open);
 }
