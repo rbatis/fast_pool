@@ -716,9 +716,6 @@ async fn test_downcast() {
 
 #[tokio::test]
 async fn test_check_timeout_should_reduce_connections() {
-    // 验证 check 超时后 connections 计数应该减少
-    // 这个测试使用 check 失败（返回错误）而不是超时，来验证 connections 正确递减
-
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
 
@@ -757,22 +754,16 @@ async fn test_check_timeout_should_reduce_connections() {
 
     println!("Pool state: {:?}", pool.state());
 
-    // 获取一个连接（check 会失败）
     let result = pool.get().await;
     println!("First get result: {:?}", result.is_ok());
     println!("Pool state: {:?}", pool.state());
 
-    // 验证：check 失败后，connections 应该减少，下一个 get 应该能创建新连接
-    // 如果 bug 存在（connections 没有减少），第二次 get 会在 5 秒后超时
-    // 如果修复了，第二次 get 也会 check 失败但 connections 正确递减
 
-    // // 再获取一个连接
-    // let result2 = pool.get_timeout(Some(Duration::from_secs(1))).await;
-    // println!("Second get result: {:?}", result2.is_ok());
-    // println!("Pool state: {:?}", pool.state());
+    let result2 = pool.get_timeout(Some(Duration::from_secs(1))).await;
+    println!("Second get result: {:?}", result2.is_ok());
+    println!("Pool state: {:?}", pool.state());
 
-    // // 验证 connections 计数
-    // assert_eq!(pool.state().connections, 0, "connections should be 0 after failed checks");
+    assert_eq!(pool.state().connections, 0, "connections should be 0 after failed checks");
 }
 
 #[tokio::test]
