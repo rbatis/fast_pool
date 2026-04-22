@@ -24,6 +24,8 @@ pub struct Pool<M: Manager> {
     pub(crate) connections: Arc<AtomicU64>,
     /// Connection check timeout (default: 10s)
     pub timeout_check: Arc<AtomicDuration>,
+    /// Connection check timeout (default: 30s)
+    pub timeout_wait: Arc<AtomicDuration>,
 }
 
 impl<M: Manager> Debug for Pool<M> {
@@ -47,6 +49,7 @@ impl<M: Manager> Clone for Pool<M> {
             checking: self.checking.clone(),
             connections: self.connections.clone(),
             timeout_check: self.timeout_check.clone(),
+            timeout_wait: self.timeout_wait.clone(),
         }
     }
 }
@@ -71,6 +74,7 @@ impl<M: Manager> Pool<M> {
             checking: Arc::new(AtomicU64::new(0)),
             connections: Arc::new(AtomicU64::new(0)),
             timeout_check: Arc::new(AtomicDuration::new(Some(Duration::from_secs(10)))),
+            timeout_wait: Arc::new(AtomicDuration::new(Some(Duration::from_secs(30)))),
         }
     }
 
@@ -136,7 +140,7 @@ impl<M: Manager> Pool<M> {
             v
         };
         let conn = {
-           tokio::time::timeout(d.unwrap_or_else(|| self.timeout_check.get().unwrap_or_default()), f)
+           tokio::time::timeout(d.unwrap_or_else(|| self.timeout_wait.get().unwrap_or_default()), f)
                     .await
                     .map_err(|_e| M::Error::from("get_timeout"))??
         };
@@ -219,6 +223,14 @@ impl<M: Manager> Pool<M> {
     /// Set the timeout for checking connections in the pool.
     pub fn get_timeout_check(&self) -> Option<Duration> {
         self.timeout_check.get()
+    }
+
+    pub fn set_timeout_wait(&self, duration: Option<Duration>) {
+        self.timeout_wait.store(duration);
+    }
+
+    pub fn get_timeout_wait(&self) -> Option<Duration> {
+        self.timeout_wait.get()
     }
 
     /// Downcast the manager to a concrete type.
